@@ -5,7 +5,29 @@ import { useRouter } from 'next/navigation'
 
 type Answers = Record<string, string | number | boolean>
 
-const SECTIONS = [
+type Question = {
+  id: string
+  label: string
+  type: string
+  unit?: string
+  hint?: string
+  min?: number
+  max?: number
+  required?: boolean
+  options?: string[]
+  labelMin?: string
+  labelMax?: string
+  dependsOn?: { field: string; value: string }
+}
+
+type Section = {
+  id: string
+  title: string
+  subtitle: string
+  questions: Question[]
+}
+
+const SECTIONS: Section[] = [
   {
     id: 'A', title: 'Grunduppgifter', subtitle: 'Hämtas från er årsredovisning',
     questions: [
