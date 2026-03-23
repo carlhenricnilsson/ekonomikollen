@@ -89,6 +89,62 @@ const SECTIONS: Section[] = [
   },
 ]
 
+// Fält som INTE ska formateras med tusentalsavgränsare
+const NO_FORMAT_UNITS = ['år', '%']
+
+function formatWithSpaces(value: string): string {
+  if (!value && value !== '0') return ''
+  const isNegative = value.startsWith('-')
+  const digits = value.replace(/\D/g, '')
+  const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return isNegative ? '-' + formatted : formatted
+}
+
+function FormattedNumberInput({
+  id, value, unit, min, onChange
+}: {
+  id: string
+  value: string | number | boolean
+  unit?: string
+  min?: number
+  onChange: (val: number | string) => void
+}) {
+  const shouldFormat = !NO_FORMAT_UNITS.includes(unit ?? '')
+  const raw = value === '' || value === undefined ? '' : String(value)
+  const displayed = shouldFormat ? formatWithSpaces(raw) : raw
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target.value
+    if (shouldFormat) {
+      // Tillåt minus i början, annars bara siffror
+      const isNegative = input.startsWith('-')
+      const digits = input.replace(/\D/g, '')
+      const numeric = isNegative ? '-' + digits : digits
+      if (numeric === '' || numeric === '-') {
+        onChange('')
+      } else {
+        onChange(Number(numeric))
+      }
+    } else {
+      onChange(input === '' ? '' : Number(input))
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        inputMode={min !== undefined && min < 0 ? 'text' : 'numeric'}
+        value={displayed}
+        onChange={handleChange}
+        className="bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white w-full focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-colors tabular-nums"
+        placeholder={shouldFormat ? '0' : '0'}
+      />
+      {unit && <span className="text-white/40 text-sm shrink-0 w-12">{unit}</span>}
+    </div>
+  )
+}
+
 export default function SurveyPage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
@@ -171,18 +227,13 @@ export default function SurveyPage() {
                 {'hint' in q && q.hint && <p className="text-xs text-white/40 mb-2">{q.hint}</p>}
 
                 {q.type === 'number' && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={answers[q.id] as number ?? ''}
-                      onChange={e => setValue(q.id, e.target.value === '' ? '' : Number(e.target.value))}
-                      className="bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white w-full focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-colors"
-                      placeholder="0"
-                      min={'min' in q ? q.min : undefined}
-                      max={'max' in q ? q.max : undefined}
-                    />
-                    {'unit' in q && q.unit && <span className="text-white/40 text-sm shrink-0 w-12">{q.unit}</span>}
-                  </div>
+                  <FormattedNumberInput
+                    id={q.id}
+                    value={answers[q.id] ?? ''}
+                    unit={q.unit}
+                    min={q.min}
+                    onChange={val => setValue(q.id, val)}
+                  />
                 )}
 
                 {q.type === 'select' && 'options' in q && (

@@ -70,7 +70,7 @@ Använd ett professionellt men tillgängligt språk. Undvik onödig jargong. Skr
   try {
     const message = await client.messages.create({
       model: 'claude-opus-4-5',
-      max_tokens: 2000,
+      max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     })
 
