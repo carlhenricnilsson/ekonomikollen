@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase-client'
 
 type TrafficLight = 'red' | 'yellow' | 'green' | 'neutral'
 type KPI = { id: number; name: string; value: number; unit: string; light: TrafficLight }
@@ -53,13 +54,55 @@ export default function ResultsPage() {
   const [aiError, setAiError] = useState('')
 
   useEffect(() => {
-    const stored = sessionStorage.getItem('ekk_results')
-    if (stored) {
-      const data = JSON.parse(stored)
-      setKpis(data.kpis)
-      setAnswers(data.answers)
+    async function loadResults() {
+      const surveyId = params.surveyId as string
+
+      // Försök sessionStorage först (direkt efter enkät)
+      const stored = sessionStorage.getItem('ekk_results')
+      if (stored) {
+        const data = JSON.parse(stored)
+        if (data.surveyId === surveyId) {
+          setKpis(data.kpis)
+          setAnswers(data.answers)
+          setLoading(false)
+          return
+        }
+      }
+
+      // Annars hämta från Supabase (admin-vy)
+      const { data: kpiRows } = await supabase
+        .from('kpi_results')
+        .select('*')
+        .eq('survey_id', surveyId)
+        .order('kpi_number')
+
+      const { data: answerRows } = await supabase
+        .from('answers')
+        .select('*')
+        .eq('survey_id', surveyId)
+
+      if (kpiRows) {
+        const kpis = kpiRows.map(k => ({
+          id: k.kpi_number,
+          name: k.kpi_name,
+          value: Number(k.value),
+          unit: k.unit,
+          light: k.traffic_light as TrafficLight,
+        }))
+        setKpis(kpis)
+      }
+
+      if (answerRows) {
+        const ans: Record<string, unknown> = {}
+        answerRows.forEach(r => {
+          ans[r.question_code] = r.answer_numeric ?? r.answer_text ?? r.answer_choice
+        })
+        setAnswers(ans)
+      }
+
+      setLoading(false)
     }
-    setLoading(false)
+    loadResults()
   }, [params.surveyId])
 
   const redCount = kpis.filter(k => k.light === 'red').length
