@@ -147,7 +147,15 @@ export default function AdminPage() {
                 <div className="bg-black/30 border border-white/10 rounded-xl p-4 flex items-center justify-between gap-4 mb-4">
                   <span className="text-blue-300 text-sm break-all">{createdLink}</span>
                   <button
-                    onClick={() => navigator.clipboard.writeText(createdLink)}
+                    onClick={() => {
+                      const el = document.createElement('textarea')
+                      el.value = createdLink
+                      document.body.appendChild(el)
+                      el.select()
+                      document.execCommand('copy')
+                      document.body.removeChild(el)
+                      alert('Länk kopierad!')
+                    }}
                     className="shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg transition-colors"
                   >
                     Kopiera
