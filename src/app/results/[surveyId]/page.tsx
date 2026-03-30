@@ -172,17 +172,19 @@ export default function ResultsPage() {
             return (
               <div key={kpi.id} className={`${c.bg} border ${c.border} rounded-xl p-5 flex items-center justify-between`}>
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${c.dot} shrink-0`} />
-                    <span className="text-white/30 text-sm w-4">{kpi.id}</span>
+                  <div className={`w-10 h-10 rounded-xl ${c.bg} border ${c.border} flex items-center justify-center shrink-0`}>
+                    <span className={`text-lg font-bold ${c.text}`}>{kpi.id}</span>
                   </div>
                   <div>
                     <p className="font-medium text-white">{kpi.name}</p>
-                    <p className={`text-xs font-medium ${c.text} mt-0.5`}>{c.label}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className={`w-2 h-2 rounded-full ${c.dot}`} />
+                      <p className={`text-xs font-medium ${c.text}`}>{c.label}</p>
+                    </div>
                   </div>
                 </div>
                 <div className="text-right shrink-0 ml-4">
-                  <p className="text-xl font-bold text-white">{fmt(kpi.value, kpi.unit)}</p>
+                  <p className="text-2xl font-bold text-white">{fmt(kpi.value, kpi.unit)}</p>
                 </div>
               </div>
             )
