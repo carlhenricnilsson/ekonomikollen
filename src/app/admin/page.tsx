@@ -114,7 +114,7 @@ export default function AdminPage() {
       {/* Header */}
       <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-bold">Ekonomi<span className="text-blue-400">kollen</span></span>
+          <span className="text-xl font-bold">BRF-Ekonomi<span className="text-blue-400">kollen</span></span>
           <span className="bg-purple-500/20 text-purple-300 text-xs font-medium px-2 py-0.5 rounded-full">Superadmin</span>
         </div>
         <div className="flex items-center gap-4">
