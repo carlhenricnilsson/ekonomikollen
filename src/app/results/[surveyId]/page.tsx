@@ -33,15 +33,24 @@ function fmt(value: number, unit: string) {
 function MarkdownText({ text }: { text: string }) {
   const lines = text.split('\n')
   return (
-    <div className="space-y-3 text-white/80 leading-relaxed">
+    <div className="space-y-1.5 text-white/80 leading-snug">
       {lines.map((line, i) => {
-        if (line.startsWith('## ')) return <h2 key={i} className="text-white font-bold text-lg mt-6 mb-2 first:mt-0">{line.replace('## ', '')}</h2>
-        if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="text-white font-semibold">{line.replace(/\*\*/g, '')}</p>
-        if (line.startsWith('- ')) return <li key={i} className="list-disc list-inside text-white/70 ml-2">{line.replace('- ', '')}</li>
+        // Hoppa över horisontella linjer (--- eller ***)
+        if (/^[-*]{3,}$/.test(line.trim())) return null
+        // Tomrad → liten luft
         if (line.trim() === '') return <div key={i} className="h-1" />
+        // ### rubrik (KPI-rubriker)
+        if (line.startsWith('### ')) return <h3 key={i} className="text-white font-bold text-base mt-4 mb-1">{line.replace(/^###\s+/, '')}</h3>
+        // ## rubrik
+        if (line.startsWith('## ')) return <h2 key={i} className="text-white font-bold text-lg mt-5 mb-1">{line.replace(/^##\s+/, '')}</h2>
+        // # rubrik
+        if (line.startsWith('# ')) return <h1 key={i} className="text-white font-bold text-xl mt-5 mb-1">{line.replace(/^#\s+/, '')}</h1>
+        // Punktlista
+        if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="list-disc list-inside text-white/70 ml-2">{line.replace(/^[-*]\s+/, '')}</li>
+        // Rad med inline bold
         const parts = line.split(/(\*\*[^*]+\*\*)/)
         return (
-          <p key={i}>
+          <p key={i} className="text-white/80">
             {parts.map((part, j) =>
               part.startsWith('**') && part.endsWith('**')
                 ? <strong key={j} className="text-white font-semibold">{part.replace(/\*\*/g, '')}</strong>
