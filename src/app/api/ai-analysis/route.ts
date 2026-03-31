@@ -63,7 +63,7 @@ För varje rött eller gult nyckeltal: ge en konkret, handlingsorienterad rekomm
 
 **På 30–50 års sikt:** Gör en bedömning av föreningens långsiktiga hållbarhet med fokus på underhållsbehov, lånesituation och avgiftsutveckling. Var ärlig om osäkerheten i en sådan prognos.
 
-## Slutord
+## Slutord till styrelsen
 En uppmuntrande men ärlig avslutning riktad till styrelsen.
 
 Använd ett professionellt men tillgängligt språk. Undvik onödig jargong. Skriv som om du presenterar för en styrelse som inte är ekonomer.
