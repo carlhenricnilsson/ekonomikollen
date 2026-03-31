@@ -15,14 +15,76 @@ const LIGHT_COLORS = {
   neutral: { bg: 'bg-white/5',       border: 'border-white/20',      dot: 'bg-blue-400',   text: 'text-blue-400',   label: 'Info' },
 }
 
-const KPI_INFO: Record<number, { desc: string; red: string; green: string }> = {
-  1: { desc: 'Visar avgiftsnivån per kvm bostadsrättsyta. Nationellt snitt 2024: 784 kr/kvm.',               red: '>1 000 kr/kvm',  green: '<800 kr/kvm'   },
-  2: { desc: 'Föreningens räntebärande lån per kvm totalyta. Hög skuldsättning ökar räntekänsligheten.',    red: '>15 000 kr/kvm', green: '<5 000 kr/kvm'  },
-  3: { desc: 'Hur stor del av årsavgifterna som behöver höjas vid 1% ränteökning. Viktigaste riskindikator.', red: '>10%',          green: '<5%'           },
-  4: { desc: 'Justerat resultat per kvm – föreningens förmåga att spara för framtida underhåll. Snitt 2024: 124 kr/kvm.', red: '<130 kr/kvm', green: '>250 kr/kvm' },
-  5: { desc: 'Värme, el och vatten per kvm. Påverkas av byggnadsålder, geografiskt läge och uppvärmningsform.', red: '>250 kr/kvm', green: '<175 kr/kvm'  },
-  6: { desc: 'Som KPI 1 men räknat på hela ytan inkl. lokaler och garage. Ger rättvisare bild vid uthyrda lokaler.', red: '>1 000 kr/kvm', green: '<700 kr/kvm' },
-  7: { desc: 'Föreningens lån per kvm bostadsrätt – påverkar direkt era månadsavgifter. Snitt 2024: 7 191 kr/kvm.', red: '>15 000 kr/kvm', green: '<5 000 kr/kvm' },
+const KPI_INFO: Record<number, { desc: string }> = {
+  1: { desc: 'Visar avgiftsnivån per kvm bostadsrättsyta. Nationellt snitt 2024: 784 kr/kvm.' },
+  2: { desc: 'Föreningens räntebärande lån per kvm totalyta. Hög skuldsättning ökar räntekänsligheten.' },
+  3: { desc: 'Hur stor del av årsavgifterna som behöver höjas vid 1% ränteökning. Viktigaste riskindikator.' },
+  4: { desc: 'Justerat resultat per kvm – föreningens förmåga att spara för framtida underhåll. Nationellt snitt 2024: 124 kr/kvm.' },
+  5: { desc: 'Värme, el och vatten per kvm. Påverkas av byggnadsålder, geografiskt läge och uppvärmningsform.' },
+  6: { desc: 'Som KPI 1 men räknat på hela ytan inkl. lokaler och garage. Ger rättvisare bild vid uthyrda lokaler.' },
+  7: { desc: 'Föreningens lån per kvm bostadsrätt – påverkar direkt era månadsavgifter. Nationellt snitt 2024: 7 191 kr/kvm.' },
+}
+
+// L = vänsterkant (sämst), R = högerkant (bäst), red = rött/gult-gräns, green = gult/grönt-gräns
+// Formel: pos% = (value - L) / (R - L) × 100  →  fungerar för båda riktningar
+type Scale = { L: number; R: number; red: number; green: number }
+const KPI_SCALES: Record<number, Scale> = {
+  1: { L: 1250,  R: 600,   red: 1000,  green: 800  },  // lägre = bättre
+  2: { L: 20000, R: 2000,  red: 15000, green: 5000 },  // lägre = bättre
+  3: { L: 14,    R: 2,     red: 10,    green: 5    },  // lägre = bättre
+  4: { L: -50,   R: 400,   red: 130,   green: 250  },  // högre = bättre
+  5: { L: 325,   R: 100,   red: 250,   green: 175  },  // lägre = bättre
+  6: { L: 1300,  R: 450,   red: 1000,  green: 700  },  // lägre = bättre
+  7: { L: 20000, R: 2000,  red: 15000, green: 5000 },  // lägre = bättre
+}
+
+function scalePct(value: number, s: Scale): number {
+  return Math.max(1, Math.min(99, (value - s.L) / (s.R - s.L) * 100))
+}
+
+function fmtLabel(v: number, unit: string): string {
+  if (unit === '%') return `${v}%`
+  if (Math.abs(v) >= 10000) return `${Math.round(v / 1000)}k`
+  if (Math.abs(v) >= 1000)  return `${(v / 1000).toFixed(1)}k`
+  return `${v}`
+}
+
+function KpiScale({ kpi, scale }: { kpi: KPI; scale: Scale }) {
+  const markerPos = scalePct(kpi.value, scale)
+  const redPos    = scalePct(scale.red, scale)
+  const greenPos  = scalePct(scale.green, scale)
+  const c = LIGHT_COLORS[kpi.light]
+
+  return (
+    <div className="mt-3 select-none">
+      {/* Bar */}
+      <div className="relative h-3 rounded-full" style={{ background: 'transparent' }}>
+        {/* Färgzoner */}
+        <div className="absolute inset-0 rounded-full overflow-hidden flex">
+          <div className="h-full bg-red-500/35"    style={{ width: `${redPos}%` }} />
+          <div className="h-full bg-yellow-500/35" style={{ width: `${greenPos - redPos}%` }} />
+          <div className="h-full bg-green-500/35 flex-1" />
+        </div>
+        {/* Zonlinjerna */}
+        <div className="absolute top-0 bottom-0 w-px bg-red-400/40"   style={{ left: `${redPos}%` }} />
+        <div className="absolute top-0 bottom-0 w-px bg-green-400/40" style={{ left: `${greenPos}%` }} />
+        {/* Markör */}
+        <div
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10"
+          style={{ left: `${markerPos}%` }}
+        >
+          <div className={`w-4 h-4 rounded-full border-2 border-slate-900 shadow-lg ${c.dot}`} />
+        </div>
+      </div>
+      {/* Skaletiketter */}
+      <div className="relative h-5 mt-0.5">
+        <span className="absolute left-0 text-[10px] text-white/30 -translate-x-0">{fmtLabel(scale.L, kpi.unit)}</span>
+        <span className="absolute text-[10px] text-red-400/50   -translate-x-1/2" style={{ left: `${redPos}%` }}>{fmtLabel(scale.red, kpi.unit)}</span>
+        <span className="absolute text-[10px] text-green-400/50 -translate-x-1/2" style={{ left: `${greenPos}%` }}>{fmtLabel(scale.green, kpi.unit)}</span>
+        <span className="absolute right-0 text-[10px] text-white/30 translate-x-0">{fmtLabel(scale.R, kpi.unit)}</span>
+      </div>
+    </div>
+  )
 }
 
 function fmt(value: number, unit: string) {
@@ -295,68 +357,42 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        {/* KPI-tabell: rött vänster, grönt höger */}
-        <div className="mb-2 flex items-center text-xs text-white/30 px-4">
-          <div className="w-28 text-left text-red-400/50">Varningsnivå</div>
-          <div className="flex-1" />
-          <div className="w-8 mr-3" />
-          <div className="w-28 text-right text-green-400/50">Bra nivå</div>
-        </div>
-        <div className="space-y-2 mb-12">
+        {/* KPI-kort med visuell skala */}
+        <div className="space-y-3 mb-12">
           {kpis.map(kpi => {
-            const c = LIGHT_COLORS[kpi.light]
+            const c    = LIGHT_COLORS[kpi.light]
             const info = KPI_INFO[kpi.id]
+            const scale = KPI_SCALES[kpi.id]
             return (
               <div
                 key={kpi.id}
-                className={`${c.bg} border ${c.border} rounded-xl cursor-pointer transition-all duration-200 hover:brightness-110`}
+                className={`${c.bg} border ${c.border} rounded-xl px-5 pt-4 pb-3 cursor-pointer transition-all duration-200 hover:brightness-110`}
                 onMouseEnter={() => setHoveredKpi(kpi.id)}
                 onMouseLeave={() => setHoveredKpi(null)}
               >
-                {/* Huvudrad */}
-                <div className="flex items-center gap-3 px-4 py-3">
-                  {/* Vänster: röd gräns */}
-                  <div className="w-28 shrink-0 text-left">
-                    <span className="text-xs text-red-400/70 font-mono">{info?.red}</span>
+                {/* Topprad: nr + namn + status + värde */}
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg ${c.bg} border ${c.border} flex items-center justify-center shrink-0`}>
+                    <span className={`text-sm font-bold ${c.text}`}>{kpi.id}</span>
                   </div>
-
-                  {/* Mitten: nr + namn + status */}
-                  <div className="flex-1 flex items-center gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg ${c.bg} border ${c.border} flex items-center justify-center shrink-0`}>
-                      <span className={`text-sm font-bold ${c.text}`}>{kpi.id}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-white text-sm truncate">{kpi.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className={`w-2 h-2 rounded-full ${c.dot} shrink-0`} />
-                        <p className={`text-xs font-semibold ${c.text}`}>{c.label}</p>
-                      </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-white text-sm leading-tight">{kpi.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className={`w-2 h-2 rounded-full ${c.dot} shrink-0`} />
+                      <p className={`text-xs font-semibold ${c.text}`}>{c.label}</p>
                     </div>
                   </div>
-
-                  {/* Värde */}
                   <div className="shrink-0 text-right">
-                    <p className={`text-lg font-bold ${c.text}`}>{fmt(kpi.value, kpi.unit)}</p>
-                  </div>
-
-                  {/* Höger: grön gräns */}
-                  <div className="w-28 shrink-0 text-right">
-                    <span className="text-xs text-green-400/70 font-mono">{info?.green}</span>
+                    <p className={`text-xl font-bold ${c.text}`}>{fmt(kpi.value, kpi.unit)}</p>
                   </div>
                 </div>
 
-                {/* Benchmark – alltid synlig */}
-                {benchmarks[kpi.id] && (
-                  <div className="px-4 pb-3">
-                    <BenchmarkBar kpi={kpi} benchmark={benchmarks[kpi.id]} />
-                  </div>
-                )}
+                {/* Visuell skala */}
+                {scale && <KpiScale kpi={kpi} scale={scale} />}
 
                 {/* Hover: beskrivning */}
                 {hoveredKpi === kpi.id && info && (
-                  <div className="px-4 pb-3 pt-0 border-t border-white/10 mt-0">
-                    <p className="text-white/60 text-xs mt-2">{info.desc}</p>
-                  </div>
+                  <p className="text-white/50 text-xs mt-2 pt-2 border-t border-white/10">{info.desc}</p>
                 )}
               </div>
             )
