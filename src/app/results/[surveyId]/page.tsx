@@ -58,70 +58,29 @@ type Benchmark = { p25: number; median: number; p75: number; unit: string; sourc
 
 function BenchmarkBar({ kpi, benchmark }: { kpi: KPI; benchmark: Benchmark }) {
   const fmt2 = (v: number) => kpi.unit === '%' ? `${v.toFixed(1)}%` : `${Math.round(v).toLocaleString('sv-SE')}`
-
-  // Beräkna position på skalan (0-100%)
-  const allVals = [benchmark.p25 * 0.5, benchmark.p75 * 1.8, kpi.value]
-  const min = Math.min(...allVals)
-  const max = Math.max(...allVals)
-  const range = max - min || 1
-
-  const pos  = (v: number) => Math.min(98, Math.max(2, ((v - min) / range) * 100))
-  const myPos  = pos(kpi.value)
-  const p25Pos = pos(benchmark.p25)
-  const medPos = pos(benchmark.median)
-  const p75Pos = pos(benchmark.p75)
-  const barLeft = Math.min(p25Pos, p75Pos)
-  const barWidth = Math.abs(p75Pos - p25Pos)
-
   const c = LIGHT_COLORS[kpi.light]
 
   return (
-    <div className="mt-4 pt-4 border-t border-white/10">
-      <div className="flex items-center justify-between mb-3 text-xs text-white/40">
-        <span>Jämförelse: <span className="text-white/60">{benchmark.source}</span></span>
-        <span>{benchmark.count > 0 ? `${benchmark.count} BRF:er i databasen` : ''}</span>
-      </div>
-
-      {/* Stapeldiagram */}
-      <div className="relative h-8 mb-3">
-        {/* Bakgrund */}
-        <div className="absolute inset-0 bg-white/5 rounded-lg" />
-        {/* P25–P75 intervall */}
-        <div
-          className="absolute top-0 bottom-0 bg-white/10 rounded"
-          style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
-        />
-        {/* Median-linje */}
-        <div
-          className="absolute top-1 bottom-1 w-0.5 bg-white/50 rounded"
-          style={{ left: `${medPos}%` }}
-        />
-        {/* Din BRF */}
-        <div
-          className={`absolute top-0.5 bottom-0.5 w-1.5 rounded-full ${c.dot} shadow-lg`}
-          style={{ left: `${myPos}%`, transform: 'translateX(-50%)' }}
-        />
-      </div>
-
-      {/* Etiketter */}
-      <div className="grid grid-cols-4 text-center gap-2 mt-1">
+    <div className="mt-3 pt-3 border-t border-white/10">
+      <div className="grid grid-cols-4 text-center gap-2">
         <div>
-          <div className="text-white/50 text-xs mb-0.5">25:e percentil</div>
-          <div className="text-white/80 text-sm font-semibold">{fmt2(benchmark.p25)}</div>
+          <div className="text-white/40 text-xs mb-0.5">25:e percentil</div>
+          <div className="text-white/70 text-sm font-semibold">{fmt2(benchmark.p25)}</div>
         </div>
         <div>
-          <div className="text-white/50 text-xs mb-0.5">Median</div>
+          <div className="text-white/40 text-xs mb-0.5">Median</div>
           <div className="text-white font-bold text-sm">{fmt2(benchmark.median)}</div>
         </div>
         <div>
-          <div className="text-white/50 text-xs mb-0.5">75:e percentil</div>
-          <div className="text-white/80 text-sm font-semibold">{fmt2(benchmark.p75)}</div>
+          <div className="text-white/40 text-xs mb-0.5">75:e percentil</div>
+          <div className="text-white/70 text-sm font-semibold">{fmt2(benchmark.p75)}</div>
         </div>
         <div>
           <div className={`${c.text} text-xs font-bold mb-0.5`}>Er BRF</div>
           <div className={`${c.text} text-sm font-bold`}>{fmt2(kpi.value)}</div>
         </div>
       </div>
+      <div className="text-xs text-white/25 mt-1 text-right">{benchmark.source}</div>
     </div>
   )
 }
