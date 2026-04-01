@@ -25,63 +25,99 @@ const KPI_INFO: Record<number, { desc: string }> = {
   7: { desc: 'Föreningens lån per kvm bostadsrätt – påverkar direkt era månadsavgifter. Nationellt snitt 2024: 7 191 kr/kvm.' },
 }
 
-// L = vänsterkant (sämst), R = högerkant (bäst), red = rött/gult-gräns, green = gult/grönt-gräns
-// Formel: pos% = (value - L) / (R - L) × 100  →  fungerar för båda riktningar
-type Scale = { L: number; R: number; red: number; green: number }
-const KPI_SCALES: Record<number, Scale> = {
-  1: { L: 1250,  R: 600,   red: 1000,  green: 800  },  // lägre = bättre
-  2: { L: 20000, R: 2000,  red: 15000, green: 5000 },  // lägre = bättre
-  3: { L: 14,    R: 2,     red: 10,    green: 5    },  // lägre = bättre
-  4: { L: -50,   R: 400,   red: 130,   green: 250  },  // högre = bättre
-  5: { L: 325,   R: 100,   red: 250,   green: 175  },  // lägre = bättre
-  6: { L: 1300,  R: 450,   red: 1000,  green: 700  },  // lägre = bättre
-  7: { L: 20000, R: 2000,  red: 15000, green: 5000 },  // lägre = bättre
+// Normaliserad skala: grön tröskel ALLTID vid position 20, röd tröskel ALLTID vid position 80.
+// Vänster = bra (grönt), höger = dåligt (rött).
+// green = värdet vid pos 20 (bättre tröskel), red = värdet vid pos 80 (sämre tröskel).
+// Lägre=bättre: green < red (KPI 1,2,3,5,6,7). Högre=bättre: green > red (KPI 4).
+type Thresh = { green: number; red: number }
+const KPI_THRESH: Record<number, Thresh> = {
+  1: { green: 800,  red: 1000  },
+  2: { green: 5000, red: 15000 },
+  3: { green: 5,    red: 10    },
+  4: { green: 250,  red: 130   }, // högre = bättre → green > red
+  5: { green: 175,  red: 250   },
+  6: { green: 700,  red: 1000  },
+  7: { green: 5000, red: 15000 },
 }
 
-function scalePct(value: number, s: Scale): number {
-  return Math.max(1, Math.min(99, (value - s.L) / (s.R - s.L) * 100))
+// Råposition (kan vara utanför 0-100)
+function rawP(value: number, t: Thresh): number {
+  return 20 + (value - t.green) / (t.red - t.green) * 60
 }
 
-function fmtLabel(v: number, unit: string): string {
-  if (unit === '%') return `${v}%`
-  if (Math.abs(v) >= 10000) return `${Math.round(v / 1000)}k`
-  if (Math.abs(v) >= 1000)  return `${(v / 1000).toFixed(1)}k`
-  return `${v}`
+// Markörsposition: klampas enligt spec
+//   p < 0    → 3  (långt utanför god sida)
+//   0 ≤ p < 10 → 7  (i streckad zon, nära)
+//   10 ≤ p ≤ 90 → p  (på den linjära skalan)
+//   90 < p ≤ 100 → 93 (i streckad zon, nära)
+//   p > 100  → 97 (långt utanför dålig sida)
+function clampP(p: number): number {
+  if (p < 0)   return 3
+  if (p < 10)  return 7
+  if (p > 100) return 97
+  if (p > 90)  return 93
+  return p
 }
 
-function KpiScale({ kpi, scale }: { kpi: KPI; scale: Scale }) {
-  const markerPos = scalePct(kpi.value, scale)
-  const redPos    = scalePct(scale.red, scale)
-  const greenPos  = scalePct(scale.green, scale)
-  const c = LIGHT_COLORS[kpi.light]
+// Värdet vid skalans ytterkanter (pos 0 och 100)
+function edgeVal(pos: 0 | 100, t: Thresh): number {
+  return t.green + (pos - 20) * (t.red - t.green) / 60
+}
+
+function fmtScaleLabel(v: number, unit: string): string {
+  if (unit === '%') return `${Math.round(v)}%`
+  const r = Math.round(v)
+  if (Math.abs(r) >= 10000) return `${Math.round(r / 1000)}k`
+  if (Math.abs(r) >= 1000)  return r.toLocaleString('sv-SE')
+  return `${r}`
+}
+
+// Streckad bakgrund via CSS gradient
+const DASH_GREEN = 'repeating-linear-gradient(90deg, rgba(74,222,128,0.45) 0,rgba(74,222,128,0.45) 4px,transparent 4px,transparent 8px)'
+const DASH_RED   = 'repeating-linear-gradient(90deg, rgba(248,113,113,0.45) 0,rgba(248,113,113,0.45) 4px,transparent 4px,transparent 8px)'
+
+function KpiScale({ kpi, thresh }: { kpi: KPI; thresh: Thresh }) {
+  const mp = clampP(rawP(kpi.value, thresh))
+  const v0   = edgeVal(0,   thresh)
+  const v100 = edgeVal(100, thresh)
+  const dotColor = kpi.light === 'green' ? '#4ade80'
+                 : kpi.light === 'yellow' ? '#facc15'
+                 : kpi.light === 'red'    ? '#f87171'
+                 : '#60a5fa'
 
   return (
     <div className="mt-3 select-none">
-      {/* Bar */}
-      <div className="relative h-3 rounded-full" style={{ background: 'transparent' }}>
-        {/* Färgzoner */}
-        <div className="absolute inset-0 rounded-full overflow-hidden flex">
-          <div className="h-full bg-red-500/35"    style={{ width: `${redPos}%` }} />
-          <div className="h-full bg-yellow-500/35" style={{ width: `${greenPos - redPos}%` }} />
-          <div className="h-full bg-green-500/35 flex-1" />
+      {/* Stapeln */}
+      <div className="relative h-3 overflow-visible">
+        {/* 0–10 %: streckad grön */}
+        <div className="absolute inset-y-0 flex items-center" style={{ left: '0%', width: '10%' }}>
+          <div className="w-full h-[3px] rounded-l-full" style={{ background: DASH_GREEN }} />
         </div>
-        {/* Zonlinjerna */}
-        <div className="absolute top-0 bottom-0 w-px bg-red-400/40"   style={{ left: `${redPos}%` }} />
-        <div className="absolute top-0 bottom-0 w-px bg-green-400/40" style={{ left: `${greenPos}%` }} />
-        {/* Markör */}
+        {/* 10–20 %: solid grön */}
+        <div className="absolute inset-y-0 bg-green-500/40" style={{ left: '10%', width: '10%' }} />
+        {/* 20–80 %: solid gul */}
+        <div className="absolute inset-y-0 bg-yellow-500/40" style={{ left: '20%', width: '60%' }} />
+        {/* 80–90 %: solid röd */}
+        <div className="absolute inset-y-0 bg-red-500/40" style={{ left: '80%', width: '10%' }} />
+        {/* 90–100 %: streckad röd */}
+        <div className="absolute inset-y-0 flex items-center" style={{ left: '90%', width: '10%' }}>
+          <div className="w-full h-[3px] rounded-r-full" style={{ background: DASH_RED }} />
+        </div>
+        {/* Vertikala gränssträck vid pos 20 och 80 */}
+        <div className="absolute inset-y-0 w-px bg-white/20" style={{ left: '20%' }} />
+        <div className="absolute inset-y-0 w-px bg-white/20" style={{ left: '80%' }} />
+        {/* Markörpunkt */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10"
-          style={{ left: `${markerPos}%` }}
-        >
-          <div className={`w-4 h-4 rounded-full border-2 border-slate-900 shadow-lg ${c.dot}`} />
-        </div>
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-slate-900 shadow-lg z-10"
+          style={{ left: `${mp}%`, backgroundColor: dotColor }}
+        />
       </div>
-      {/* Skaletiketter */}
-      <div className="relative h-5 mt-0.5">
-        <span className="absolute left-0 text-[10px] text-white/30 -translate-x-0">{fmtLabel(scale.L, kpi.unit)}</span>
-        <span className="absolute text-[10px] text-red-400/50   -translate-x-1/2" style={{ left: `${redPos}%` }}>{fmtLabel(scale.red, kpi.unit)}</span>
-        <span className="absolute text-[10px] text-green-400/50 -translate-x-1/2" style={{ left: `${greenPos}%` }}>{fmtLabel(scale.green, kpi.unit)}</span>
-        <span className="absolute right-0 text-[10px] text-white/30 translate-x-0">{fmtLabel(scale.R, kpi.unit)}</span>
+      {/* Etiketter: pos 0, 20, 80, 100 */}
+      <div className="relative h-4 mt-0.5">
+        <span className="absolute left-0  text-[10px] text-white/30">{fmtScaleLabel(v0, kpi.unit)}</span>
+        <span className="absolute text-[10px] text-green-400/70 font-medium -translate-x-1/2" style={{ left: '20%' }}>{fmtScaleLabel(thresh.green, kpi.unit)}</span>
+        <span className="absolute text-[10px] text-red-400/70   font-medium -translate-x-1/2" style={{ left: '80%' }}>{fmtScaleLabel(thresh.red, kpi.unit)}</span>
+        <span className="absolute right-0 text-[10px] text-white/30 translate-x-0">{fmtScaleLabel(v100, kpi.unit)}</span>
       </div>
     </div>
   )
@@ -360,9 +396,9 @@ export default function ResultsPage() {
         {/* KPI-kort med visuell skala */}
         <div className="space-y-3 mb-12">
           {kpis.map(kpi => {
-            const c    = LIGHT_COLORS[kpi.light]
-            const info = KPI_INFO[kpi.id]
-            const scale = KPI_SCALES[kpi.id]
+            const c      = LIGHT_COLORS[kpi.light]
+            const info   = KPI_INFO[kpi.id]
+            const thresh = KPI_THRESH[kpi.id]
             return (
               <div
                 key={kpi.id}
@@ -388,7 +424,7 @@ export default function ResultsPage() {
                 </div>
 
                 {/* Visuell skala */}
-                {scale && <KpiScale kpi={kpi} scale={scale} />}
+                {thresh && <KpiScale kpi={kpi} thresh={thresh} />}
 
                 {/* Hover: beskrivning */}
                 {hoveredKpi === kpi.id && info && (
