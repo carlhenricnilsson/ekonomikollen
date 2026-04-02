@@ -51,18 +51,27 @@ export default function AdminPage() {
     const { data } = await supabase
       .from('surveys')
       .select('*, kpi_results(*)')
-      .order('created_at', { ascending: false })
 
-    setSurveys(data ?? [])
+    // Sortera alfabetiskt på BRF-namn, sedan år fallback
+    const sorted = (data ?? []).sort((a, b) => {
+      const nameA = (a.brf_name ?? `Enkät ${a.survey_year}`).toLowerCase()
+      const nameB = (b.brf_name ?? `Enkät ${b.survey_year}`).toLowerCase()
+      if (nameA < nameB) return -1
+      if (nameA > nameB) return 1
+      return (a.survey_year ?? 0) - (b.survey_year ?? 0)
+    })
+
+    setSurveys(sorted)
     setLoading(false)
   }
 
   async function createSurveyLink() {
     setCreating(true)
+    // Skicka bara brf_name – API:et normaliserar namn och extraherar år
     const res = await fetch('/api/create-survey-link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brf_name: newBrfName, survey_year: new Date().getFullYear() }),
+      body: JSON.stringify({ brf_name: newBrfName }),
     })
     const data = await res.json()
     if (data.token) {
