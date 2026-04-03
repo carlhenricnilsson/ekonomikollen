@@ -36,6 +36,21 @@ export default function AdminPage() {
   const [pdfNotes, setPdfNotes] = useState('')
   const [pdfError, setPdfError] = useState('')
   const [pdfSubmitting, setPdfSubmitting] = useState(false)
+  // Inbjudningar
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteBrf, setInviteBrf] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [inviteMsg, setInviteMsg] = useState('')
+  // Vouchers
+  const [showVouchers, setShowVouchers] = useState(false)
+  const [vouchers, setVouchers] = useState<{ id: string; code: string; discount_percent: number; max_uses: number; times_used: number; valid_until: string | null }[]>([])
+  const [newVoucherCode, setNewVoucherCode] = useState('')
+  const [newVoucherDiscount, setNewVoucherDiscount] = useState(100)
+  const [newVoucherMaxUses, setNewVoucherMaxUses] = useState(1)
+  const [creatingVoucher, setCreatingVoucher] = useState(false)
+  const [voucherMsg, setVoucherMsg] = useState('')
+  const [userId, setUserId] = useState('')
 
   useEffect(() => {
     checkAuth()
@@ -46,6 +61,7 @@ export default function AdminPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
     setUserEmail(user.email ?? '')
+    setUserId(user.id)
 
     const { data: profile } = await supabase
       .from('user_profiles')
@@ -89,6 +105,55 @@ export default function AdminPage() {
       fetchSurveys()
     }
     setCreating(false)
+  }
+
+  async function sendInvite() {
+    setInviting(true)
+    setInviteMsg('')
+    const res = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail, brf_base_name: inviteBrf || null, invited_by: userId }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      setInviteMsg(`Inbjudan skickad till ${inviteEmail}`)
+      setInviteEmail('')
+      setInviteBrf('')
+    } else {
+      setInviteMsg(data.error || 'Något gick fel')
+    }
+    setInviting(false)
+  }
+
+  async function fetchVouchers() {
+    const res = await fetch('/api/vouchers')
+    const data = await res.json()
+    setVouchers(data.vouchers ?? [])
+  }
+
+  async function createVoucher() {
+    setCreatingVoucher(true)
+    setVoucherMsg('')
+    const res = await fetch('/api/vouchers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: newVoucherCode,
+        discount_percent: newVoucherDiscount,
+        max_uses: newVoucherMaxUses,
+        created_by: userId,
+      }),
+    })
+    const data = await res.json()
+    if (data.voucher) {
+      setVoucherMsg(`Voucher "${data.voucher.code}" skapad`)
+      setNewVoucherCode('')
+      fetchVouchers()
+    } else {
+      setVoucherMsg(data.error || 'Något gick fel')
+    }
+    setCreatingVoucher(false)
   }
 
   async function handleLogout() {
@@ -250,7 +315,7 @@ export default function AdminPage() {
             <h1 className="text-2xl font-bold">Alla enkäter</h1>
             <p className="text-white/40 text-sm mt-1">{surveys.length} enkäter totalt</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <button
               onClick={() => { setShowPdfUpload(true); setPdfFile(null); setPdfExtracted(null); setPdfError('') }}
               className="bg-purple-500 hover:bg-purple-400 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-colors flex items-center gap-2"
@@ -263,6 +328,18 @@ export default function AdminPage() {
               className="bg-blue-500 hover:bg-blue-400 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-colors"
             >
               + Skapa enkätlänk
+            </button>
+            <button
+              onClick={() => setShowInvite(!showInvite)}
+              className="bg-green-600 hover:bg-green-500 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-colors"
+            >
+              Bjud in BRF-admin
+            </button>
+            <button
+              onClick={() => { setShowVouchers(!showVouchers); if (!showVouchers) fetchVouchers() }}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-colors"
+            >
+              Vouchers
             </button>
           </div>
         </div>
@@ -437,6 +514,135 @@ export default function AdminPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Bjud in BRF-admin */}
+        {showInvite && (
+          <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-6 mb-8">
+            <h2 className="font-bold text-lg mb-4">Bjud in BRF-admin</h2>
+            <p className="text-white/50 text-sm mb-4">
+              Skicka en inbjudan till en BRF-styrelsemedlem. Om de redan har ett konto kopplas BRF:en automatiskt.
+            </p>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-white/60 mb-1">E-post</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="styrelse@brf.se"
+                  className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-white/60 mb-1">BRF-namn (valfritt)</label>
+                <input
+                  type="text"
+                  value={inviteBrf}
+                  onChange={e => setInviteBrf(e.target.value)}
+                  placeholder="BRF Solgläntan"
+                  className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-400"
+                />
+              </div>
+            </div>
+            {inviteMsg && <p className={`text-sm mb-3 ${inviteMsg.includes('skickad') ? 'text-green-400' : 'text-red-400'}`}>{inviteMsg}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={sendInvite}
+                disabled={!inviteEmail || inviting}
+                className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
+              >
+                {inviting ? 'Skickar...' : 'Skicka inbjudan'}
+              </button>
+              <button onClick={() => setShowInvite(false)} className="text-white/40 hover:text-white text-sm px-4 py-2.5 transition-colors">
+                Stäng
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Vouchers */}
+        {showVouchers && (
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6 mb-8">
+            <h2 className="font-bold text-lg mb-4">Vouchers / Rabattkoder</h2>
+            <p className="text-white/50 text-sm mb-4">
+              Skapa rabattkoder som BRF-admins kan använda för att låsa upp rapporter. Normalpris: 5 995 kr.
+            </p>
+
+            {/* Skapa ny */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
+              <h3 className="text-sm font-medium mb-3">Skapa ny voucher</h3>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs text-white/50 mb-1">Kod</label>
+                  <input
+                    type="text"
+                    value={newVoucherCode}
+                    onChange={e => setNewVoucherCode(e.target.value.toUpperCase())}
+                    placeholder="GRATIS2025"
+                    className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/50 mb-1">Rabatt (%)</label>
+                  <input
+                    type="number"
+                    value={newVoucherDiscount}
+                    onChange={e => setNewVoucherDiscount(Number(e.target.value))}
+                    min={0}
+                    max={100}
+                    className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/50 mb-1">Max användningar</label>
+                  <input
+                    type="number"
+                    value={newVoucherMaxUses}
+                    onChange={e => setNewVoucherMaxUses(Number(e.target.value))}
+                    min={1}
+                    className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+              {voucherMsg && <p className={`text-sm mb-3 ${voucherMsg.includes('skapad') ? 'text-green-400' : 'text-red-400'}`}>{voucherMsg}</p>}
+              <button
+                onClick={createVoucher}
+                disabled={!newVoucherCode || creatingVoucher}
+                className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-medium px-5 py-2 rounded-xl text-sm transition-colors"
+              >
+                {creatingVoucher ? 'Skapar...' : 'Skapa voucher'}
+              </button>
+            </div>
+
+            {/* Lista befintliga */}
+            {vouchers.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-white/60">Befintliga vouchers</h3>
+                {vouchers.map(v => (
+                  <div key={v.id} className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <span className="font-mono text-amber-400 font-medium text-sm">{v.code}</span>
+                      <span className="text-white/50 text-xs">
+                        {v.discount_percent === 100 ? 'Helt gratis' : `${v.discount_percent}% rabatt`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-white/40">
+                      <span>Använd: {v.times_used}/{v.max_uses}</span>
+                      {v.valid_until && <span>Giltig t.o.m. {new Date(v.valid_until).toLocaleDateString('sv-SE')}</span>}
+                      <span className={v.times_used >= v.max_uses ? 'text-red-400' : 'text-green-400'}>
+                        {v.times_used >= v.max_uses ? 'Förbrukad' : 'Aktiv'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button onClick={() => setShowVouchers(false)} className="text-white/40 hover:text-white text-sm mt-4 transition-colors">
+              Stäng
+            </button>
           </div>
         )}
 

@@ -4,12 +4,16 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase-client'
 
+type Mode = 'login' | 'register' | 'forgot'
+
 export default function LoginPage() {
   const router = useRouter()
+  const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -34,7 +38,89 @@ export default function LoginPage() {
     const role = profile?.role
     if (role === 'superadmin') router.push('/admin')
     else if (role === 'brf_admin') router.push('/dashboard')
-    else router.push('/admin') // fallback om profil saknas
+    else router.push('/dashboard')
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    if (password.length < 6) {
+      setError('Lösenordet måste vara minst 6 tecken')
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase.auth.signUp({ email, password })
+
+    if (error) {
+      setError(error.message === 'User already registered'
+        ? 'E-postadressen är redan registrerad. Testa att logga in istället.'
+        : error.message)
+      setLoading(false)
+      return
+    }
+
+    if (data.user) {
+      // Skapa user_profile som brf_admin
+      await supabase.from('user_profiles').upsert({
+        id: data.user.id,
+        role: 'brf_admin',
+      })
+
+      // Kolla om det finns en inbjudan – koppla BRF automatiskt
+      const { data: invitations } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .eq('accepted', false)
+
+      if (invitations && invitations.length > 0) {
+        for (const inv of invitations) {
+          if (inv.brf_base_name) {
+            await supabase.from('brf_admin_brfs').upsert({
+              user_id: data.user.id,
+              brf_base_name: inv.brf_base_name,
+            })
+          }
+          await supabase.from('invitations').update({ accepted: true }).eq('id', inv.id)
+        }
+      }
+
+      // Logga in direkt
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+      if (loginError) {
+        setMessage('Konto skapat! Kontrollera din e-post för att verifiera kontot, logga sedan in.')
+        setMode('login')
+      } else {
+        router.push('/dashboard')
+      }
+    }
+    setLoading(false)
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login?reset=true`,
+    })
+
+    if (error) {
+      setError('Kunde inte skicka återställningslänk. Kontrollera e-postadressen.')
+    } else {
+      setMessage('En länk för att återställa lösenordet har skickats till din e-post.')
+    }
+    setLoading(false)
+  }
+
+  function switchMode(m: Mode) {
+    setMode(m)
+    setError('')
+    setMessage('')
   }
 
   return (
@@ -42,48 +128,154 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
           <h1 className="text-2xl font-bold">BRF-Ekonomi<span className="text-blue-400">kollen</span></h1>
-          <p className="text-white/40 text-sm mt-2">Logga in för att fortsätta</p>
+          <p className="text-white/40 text-sm mt-2">
+            {mode === 'login' && 'Logga in för att fortsätta'}
+            {mode === 'register' && 'Skapa ett konto'}
+            {mode === 'forgot' && 'Återställ ditt lösenord'}
+          </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm text-white/70 mb-1.5">E-post</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
-              placeholder="namn@foretag.se"
-            />
+        {message && (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm mb-4">
+            {message}
           </div>
+        )}
 
-          <div>
-            <label className="block text-sm text-white/70 mb-1.5">Lösenord</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
-              {error}
+        {mode === 'login' && (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm text-white/70 mb-1.5">E-post</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
+                placeholder="namn@foretag.se"
+              />
             </div>
-          )}
+            <div>
+              <label className="block text-sm text-white/70 mb-1.5">Lösenord</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
+                placeholder="••••••••"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
-          >
-            {loading ? 'Loggar in...' : 'Logga in'}
-          </button>
-        </form>
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              {loading ? 'Loggar in...' : 'Logga in'}
+            </button>
+
+            <div className="flex justify-between text-sm">
+              <button type="button" onClick={() => switchMode('forgot')} className="text-white/40 hover:text-white transition-colors">
+                Glömt lösenord?
+              </button>
+              <button type="button" onClick={() => switchMode('register')} className="text-blue-400 hover:text-blue-300 transition-colors">
+                Skapa konto
+              </button>
+            </div>
+          </form>
+        )}
+
+        {mode === 'register' && (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="block text-sm text-white/70 mb-1.5">E-post</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
+                placeholder="namn@foretag.se"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-white/70 mb-1.5">Lösenord</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
+                placeholder="Minst 6 tecken"
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              {loading ? 'Skapar konto...' : 'Skapa konto'}
+            </button>
+
+            <p className="text-center text-sm text-white/40">
+              Har du redan ett konto?{' '}
+              <button type="button" onClick={() => switchMode('login')} className="text-blue-400 hover:text-blue-300 transition-colors">
+                Logga in
+              </button>
+            </p>
+          </form>
+        )}
+
+        {mode === 'forgot' && (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div>
+              <label className="block text-sm text-white/70 mb-1.5">E-post</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
+                placeholder="namn@foretag.se"
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              {loading ? 'Skickar...' : 'Skicka återställningslänk'}
+            </button>
+
+            <p className="text-center text-sm text-white/40">
+              Kom du på lösenordet?{' '}
+              <button type="button" onClick={() => switchMode('login')} className="text-blue-400 hover:text-blue-300 transition-colors">
+                Logga in
+              </button>
+            </p>
+          </form>
+        )}
       </div>
     </div>
   )

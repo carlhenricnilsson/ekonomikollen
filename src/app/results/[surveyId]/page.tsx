@@ -219,6 +219,14 @@ export default function ResultsPage() {
   const [pdfLoading, setPdfLoading] = useState<string | null>(null) // 'kpi' | 'all' | null
   const [historicalKpis, setHistoricalKpis] = useState<{ year: number; surveyId: string; kpis: KPI[] }[]>([])
   const [showTrend, setShowTrend] = useState(false)
+  // Paywall-state
+  const [userRole, setUserRole] = useState<'superadmin' | 'brf_admin' | 'anonymous'>('anonymous')
+  const [userId, setUserId] = useState<string | null>(null)
+  const [reportUnlocked, setReportUnlocked] = useState(false)
+  const [voucherCode, setVoucherCode] = useState('')
+  const [voucherError, setVoucherError] = useState('')
+  const [voucherLoading, setVoucherLoading] = useState(false)
+  const [showPaywall, setShowPaywall] = useState(false)
 
   useEffect(() => {
     fetch('/api/benchmarks')
@@ -229,6 +237,33 @@ export default function ResultsPage() {
 
   useEffect(() => {
     async function loadResults() {
+      // Kolla auth-status och roll
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserId(user.id)
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+        const role = (profile?.role ?? 'brf_admin') as 'superadmin' | 'brf_admin'
+        setUserRole(role)
+
+        if (role === 'superadmin') {
+          setReportUnlocked(true)
+        } else {
+          // Kolla betalning
+          const { data: paymentData } = await supabase
+            .from('payments')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('survey_id', surveyId)
+            .eq('status', 'completed')
+            .limit(1)
+          setReportUnlocked((paymentData && paymentData.length > 0) || false)
+        }
+      }
+
       // Hämta survey-metadata
       const { data: surveyRow } = await supabase
         .from('surveys')
@@ -387,6 +422,43 @@ export default function ResultsPage() {
     }
   }
 
+  // Hitta det bästa KPI:et (grönt med lägst rawP = mest grönt)
+  const bestKpi = kpis.length > 0
+    ? kpis.reduce((best, kpi) => {
+        if (kpi.light === 'green' && best.light !== 'green') return kpi
+        if (kpi.light === 'green' && best.light === 'green') {
+          const t1 = KPI_THRESH[kpi.id]
+          const t2 = KPI_THRESH[best.id]
+          if (t1 && t2) return rawP(kpi.value, t1) < rawP(best.value, t2) ? kpi : best
+        }
+        return best
+      }, kpis[0])
+    : null
+
+  // Fullständig tillgång: superadmin, betald, eller anonym (från enkätlänk)
+  const hasFullAccess = reportUnlocked || userRole === 'superadmin' || userRole === 'anonymous'
+
+  async function redeemVoucher() {
+    if (!userId) return
+    setVoucherLoading(true)
+    setVoucherError('')
+    const res = await fetch('/api/unlock-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, survey_id: surveyId, voucher_code: voucherCode }),
+    })
+    const data = await res.json()
+    if (data.unlocked) {
+      setReportUnlocked(true)
+      setShowPaywall(false)
+    } else if (data.error) {
+      setVoucherError(data.error)
+    } else if (data.requires_payment) {
+      setVoucherError(data.message || `Pris: ${data.final_price} kr. Stripe-betalning aktiveras snart.`)
+    }
+    setVoucherLoading(false)
+  }
+
   if (loading) return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
       <div className="text-white/40">Laddar resultat...</div>
@@ -401,25 +473,29 @@ export default function ResultsPage() {
       <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between">
         <span className="text-xl font-bold">BRF-Ekonomi<span className="text-blue-400">kollen</span></span>
         <div className="flex items-center gap-3">
-          {/* PDF-knappar */}
-          <button
-            onClick={() => downloadPdf('kpi')}
-            disabled={pdfLoading !== null}
-            className="flex items-center gap-1.5 text-sm bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors font-medium"
-            title="Ladda ner KPI-rapporten utan AI-analys"
-          >
-            {pdfLoading === 'kpi' ? <Spinner /> : <DownloadIcon />}
-            Nyckeltal
-          </button>
-          <button
-            onClick={() => downloadPdf('all')}
-            disabled={pdfLoading !== null || !aiAnalysis}
-            className="flex items-center gap-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors font-medium"
-            title={!aiAnalysis ? 'Generera AI-analys först' : 'Ladda ner komplett rapport med AI-analys'}
-          >
-            {pdfLoading === 'all' ? <Spinner /> : <DownloadIcon />}
-            Fullrapport
-          </button>
+          {/* PDF-knappar – bara med full tillgång */}
+          {hasFullAccess && (
+            <>
+              <button
+                onClick={() => downloadPdf('kpi')}
+                disabled={pdfLoading !== null}
+                className="flex items-center gap-1.5 text-sm bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors font-medium"
+                title="Ladda ner KPI-rapporten utan AI-analys"
+              >
+                {pdfLoading === 'kpi' ? <Spinner /> : <DownloadIcon />}
+                Nyckeltal
+              </button>
+              <button
+                onClick={() => downloadPdf('all')}
+                disabled={pdfLoading !== null || !aiAnalysis}
+                className="flex items-center gap-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg transition-colors font-medium"
+                title={!aiAnalysis ? 'Generera AI-analys först' : 'Ladda ner komplett rapport med AI-analys'}
+              >
+                {pdfLoading === 'all' ? <Spinner /> : <DownloadIcon />}
+                Fullrapport
+              </button>
+            </>
+          )}
           <Link href="/survey" className="text-sm text-white/50 hover:text-white transition-colors">Ny enkät</Link>
         </div>
       </div>
@@ -450,6 +526,29 @@ export default function ResultsPage() {
             const c      = LIGHT_COLORS[kpi.light]
             const info   = KPI_INFO[kpi.id]
             const thresh = KPI_THRESH[kpi.id]
+            // Förhandsgranska: visa bara bästa KPI:et om ej upplåst
+            const isPreviewKpi = bestKpi && kpi.id === bestKpi.id
+            const isLocked = !hasFullAccess && !isPreviewKpi
+
+            if (isLocked) {
+              return (
+                <div key={kpi.id} className="bg-white/[0.03] border border-white/10 rounded-xl px-5 pt-4 pb-3 relative overflow-hidden">
+                  <div className="flex items-center gap-3 opacity-40 blur-[2px] select-none">
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-white/50">{kpi.id}</span>
+                    </div>
+                    <div className="flex-1"><p className="font-semibold text-white text-sm">{kpi.name}</p></div>
+                    <p className="text-white/50 text-xl font-bold">••••</p>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                </div>
+              )
+            }
+
             return (
               <div
                 key={kpi.id}
@@ -493,8 +592,82 @@ export default function ResultsPage() {
           })}
         </div>
 
-        {/* Trend-jämförelse */}
-        {historicalKpis.length > 0 && (
+        {/* Paywall-sektion */}
+        {!hasFullAccess && (
+          <div className="bg-gradient-to-b from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-8 mb-12">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold mb-2">Lås upp hela rapporten</h2>
+              <p className="text-white/50 text-sm mb-6 max-w-md mx-auto">
+                Få tillgång till alla 7 nyckeltal, trendanalys, fullständig AI-analys med rekommendationer,
+                framtidsutsikter och styrelsemötespunkter.
+              </p>
+              <p className="text-2xl font-bold text-white mb-6">5 995 kr</p>
+
+              {!showPaywall ? (
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={() => setShowPaywall(true)}
+                    className="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-8 py-3 rounded-xl transition-colors"
+                  >
+                    Lås upp rapport
+                  </button>
+                  <p className="text-white/30 text-xs">Engångskostnad. Rapporten blir permanent tillgänglig.</p>
+                </div>
+              ) : (
+                <div className="max-w-sm mx-auto">
+                  <div className="mb-4">
+                    <label className="block text-sm text-white/60 mb-1.5 text-left">Har du en rabattkod?</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={voucherCode}
+                        onChange={e => setVoucherCode(e.target.value.toUpperCase())}
+                        placeholder="RABATTKOD"
+                        className="flex-1 bg-white/5 border border-white/20 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400 font-mono"
+                      />
+                      <button
+                        onClick={redeemVoucher}
+                        disabled={!voucherCode || voucherLoading}
+                        className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors"
+                      >
+                        {voucherLoading ? 'Kollar...' : 'Använd'}
+                      </button>
+                    </div>
+                    {voucherError && <p className="text-red-400 text-xs mt-2 text-left">{voucherError}</p>}
+                  </div>
+
+                  <div className="border-t border-white/10 pt-4">
+                    <button
+                      onClick={() => {
+                        // Stripe checkout - förberett
+                        setVoucherError('Stripe-betalning aktiveras snart. Kontakta support för tillgång.')
+                      }}
+                      className="w-full bg-blue-500 hover:bg-blue-400 text-white font-semibold py-3 rounded-xl transition-colors mb-2"
+                    >
+                      Betala 5 995 kr
+                    </button>
+                    <p className="text-white/30 text-xs">Säker betalning via Stripe</p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowPaywall(false)}
+                    className="text-white/40 hover:text-white text-sm mt-4 transition-colors"
+                  >
+                    Avbryt
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Trend-jämförelse (bara med full tillgång) */}
+        {hasFullAccess && historicalKpis.length > 0 && (
           <div className="mb-12">
             <button
               onClick={() => setShowTrend(!showTrend)}
@@ -561,7 +734,34 @@ export default function ResultsPage() {
         )}
 
         {/* AI-analys – generera eller visa */}
-        {!aiAnalysis ? (
+        {!hasFullAccess && aiAnalysis ? (
+          /* Begränsad AI-förhandsgranskning */
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-8 mb-12 relative overflow-hidden">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 text-sm font-bold shrink-0">AI</div>
+              <h2 className="font-bold text-white">AI-analys (förhandsgranskning)</h2>
+            </div>
+            {/* Visa bara sammanfattningen */}
+            <div className="mb-4">
+              <MarkdownText text={aiAnalysis.split('\n## ').slice(0, 2).join('\n## ')} />
+            </div>
+            <div className="relative">
+              <div className="h-32 bg-gradient-to-b from-transparent to-slate-950 absolute inset-x-0 bottom-0 z-10" />
+              <div className="opacity-30 blur-[3px] select-none max-h-24 overflow-hidden">
+                <MarkdownText text={aiAnalysis.split('\n## ').slice(2, 3).join('\n## ')} />
+              </div>
+            </div>
+            <div className="text-center mt-4 relative z-20">
+              <p className="text-white/50 text-sm mb-3">Lås upp för att se hela analysen med rekommendationer, framtidsutsikter och styrelsemötespunkter.</p>
+              <button
+                onClick={() => setShowPaywall(true)}
+                className="bg-blue-500 hover:bg-blue-400 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors text-sm"
+              >
+                Lås upp hela rapporten – 5 995 kr
+              </button>
+            </div>
+          </div>
+        ) : !aiAnalysis ? (
           <div className="bg-blue-500/10 border border-blue-400/20 rounded-2xl p-8 text-center mb-12">
             <h2 className="text-xl font-bold mb-2">Vill ni ha en djupare analys?</h2>
             <p className="text-white/50 text-sm mb-6">
