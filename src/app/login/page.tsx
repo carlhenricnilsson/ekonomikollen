@@ -52,40 +52,36 @@ export default function LoginPage() {
       return
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password })
-
-    if (error) {
-      setError(error.message === 'User already registered'
-        ? 'E-postadressen är redan registrerad. Testa att logga in istället.'
-        : error.message)
+    let signUpData
+    try {
+      const result = await supabase.auth.signUp({ email, password })
+      if (result.error) {
+        const msg = result.error.message
+        if (msg.includes('already registered') || msg.includes('already been registered')) {
+          setError('E-postadressen är redan registrerad. Testa att logga in istället.')
+        } else {
+          setError(msg)
+        }
+        setLoading(false)
+        return
+      }
+      signUpData = result.data
+    } catch {
+      setError('Kunde inte ansluta till servern. Försök igen.')
       setLoading(false)
       return
     }
 
-    if (data.user) {
-      // Skapa user_profile som brf_admin
-      await supabase.from('user_profiles').upsert({
-        id: data.user.id,
-        role: 'brf_admin',
-      })
-
-      // Kolla om det finns en inbjudan – koppla BRF automatiskt
-      const { data: invitations } = await supabase
-        .from('invitations')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .eq('accepted', false)
-
-      if (invitations && invitations.length > 0) {
-        for (const inv of invitations) {
-          if (inv.brf_base_name) {
-            await supabase.from('brf_admin_brfs').upsert({
-              user_id: data.user.id,
-              brf_base_name: inv.brf_base_name,
-            })
-          }
-          await supabase.from('invitations').update({ accepted: true }).eq('id', inv.id)
-        }
+    if (signUpData?.user) {
+      // Sätt upp profil och inbjudningar via server-side API (kringgår RLS)
+      try {
+        await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: signUpData.user.id, email }),
+        })
+      } catch {
+        // Icke-kritiskt – profilen skapas ändå vid nästa inloggning
       }
 
       // Logga in direkt
