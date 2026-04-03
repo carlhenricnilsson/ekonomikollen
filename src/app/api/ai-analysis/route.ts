@@ -13,7 +13,8 @@ function formatKPI(kpi: KPI) {
 }
 
 export async function POST(req: NextRequest) {
-  const { kpis, answers, surveyId } = await req.json()
+  const { kpis, answers, surveyId, historical } = await req.json()
+  const histData = (historical ?? []) as { year: number; kpis: KPI[] }[]
 
   const redKPIs = kpis.filter((k: KPI) => k.light === 'red')
   const yellowKPIs = kpis.filter((k: KPI) => k.light === 'yellow')
@@ -31,11 +32,18 @@ export async function POST(req: NextRequest) {
   const feeIncrease = answers.G2_fee_increase
   const surveyYear = answers.A1_year
 
+  // Bygg historisk sektion om data finns
+  const histSection = histData.length > 0 ? `
+
+HISTORISKA NYCKELTAL (tidigare år för samma BRF):
+${histData.map(h => `Verksamhetsår ${h.year}:\n${h.kpis.map(formatKPI).join('\n')}`).join('\n\n')}
+` : ''
+
   const prompt = `Du är en erfaren ekonomisk analytiker specialiserad på svenska bostadsrättsföreningar (BRF:er).
 Du har fått in svar på Ekonomikollen – en enkät baserad på BFNAR 2023:1.
 
 NYCKELTAL FÖR VERKSAMHETSÅRET ${surveyYear}:
-${kpis.map(formatKPI).join('\n')}
+${kpis.map(formatKPI).join('\n')}${histSection}
 
 KOMPLETTERANDE INFORMATION:
 - Underhållsplan: ${hasMaintPlan ? `Ja, senast uppdaterad ${maintPlanYear || 'okänt år'}` : 'Saknas'}
@@ -50,7 +58,10 @@ Skriv en professionell analys på svenska med följande struktur:
 En kort (3–4 meningar) övergripande bedömning av föreningens ekonomiska hälsa. Var tydlig och direkt.
 
 ## Analys per nyckeltal
-Analysera de nyckeltal som är röda eller gula. Förklara vad värdet betyder i praktiken för föreningen och dess medlemmar. För nyckeltal utan trafikljus – ge en kort kommentar om vad värdet indikerar jämfört med typiska BRF:er.
+Analysera de nyckeltal som är röda eller gula. Förklara vad värdet betyder i praktiken för föreningen och dess medlemmar. För nyckeltal utan trafikljus – ge en kort kommentar om vad värdet indikerar jämfört med typiska BRF:er.${histData.length > 0 ? `
+
+## Trendutveckling
+Jämför årets nyckeltal med tidigare år. Beskriv vilka nyckeltal som förbättrats, försämrats eller är stabila. Lyft fram oroande trender och positiva utvecklingar. Var konkret med siffror.` : ''}
 
 ## Styrkor
 Lista 2–3 positiva aspekter av föreningens ekonomi.

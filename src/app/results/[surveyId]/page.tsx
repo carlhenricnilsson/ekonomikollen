@@ -123,6 +123,21 @@ function KpiScale({ kpi, thresh }: { kpi: KPI; thresh: Thresh }) {
   )
 }
 
+// Trendpil: jämför med föregående års värde
+// KPI 4: högre = bättre, alla andra: lägre = bättre
+function TrendArrow({ kpiId, current, previous }: { kpiId: number; current: number; previous: number }) {
+  const diff = current - previous
+  if (Math.abs(diff) < 0.5) return <span className="text-white/30 text-xs ml-1">→</span>
+  const higherIsBetter = kpiId === 4
+  const improved = higherIsBetter ? diff > 0 : diff < 0
+  const pct = previous !== 0 ? Math.abs(diff / previous * 100) : 0
+  return (
+    <span className={`text-xs ml-1.5 font-medium ${improved ? 'text-green-400' : 'text-red-400'}`} title={`Förändring: ${diff > 0 ? '+' : ''}${diff.toFixed(1)} (${pct.toFixed(0)}%)`}>
+      {improved ? '↑' : '↓'} {pct >= 1 ? `${pct.toFixed(0)}%` : ''}
+    </span>
+  )
+}
+
 function fmt(value: number, unit: string) {
   if (unit === '%') return `${value.toFixed(1)}%`
   return `${Math.round(value).toLocaleString('sv-SE')} ${unit}`
@@ -202,6 +217,8 @@ export default function ResultsPage() {
   const [benchmarks, setBenchmarks] = useState<Record<number, Benchmark>>({})
   const [surveyMeta, setSurveyMeta] = useState<{ brf_name: string | null; survey_year: number; version: number } | null>(null)
   const [pdfLoading, setPdfLoading] = useState<string | null>(null) // 'kpi' | 'all' | null
+  const [historicalKpis, setHistoricalKpis] = useState<{ year: number; surveyId: string; kpis: KPI[] }[]>([])
+  const [showTrend, setShowTrend] = useState(false)
 
   useEffect(() => {
     fetch('/api/benchmarks')
@@ -219,6 +236,35 @@ export default function ResultsPage() {
         .eq('id', surveyId)
         .single()
       if (surveyRow) setSurveyMeta(surveyRow)
+
+      // Hämta historiska undersökningar för samma BRF
+      if (surveyRow?.brf_name) {
+        const baseName = surveyRow.brf_name.replace(/\s+\d{4}$/, '').trim()
+        const { data: allSurveys } = await supabase
+          .from('surveys')
+          .select('id, survey_year, brf_name, kpi_results(*)')
+          .neq('id', surveyId)
+          .eq('status', 'completed')
+
+        if (allSurveys) {
+          const matching = allSurveys
+            .filter(s => s.brf_name && s.brf_name.replace(/\s+\d{4}$/, '').trim() === baseName)
+            .map(s => ({
+              year: s.survey_year,
+              surveyId: s.id,
+              kpis: (s.kpi_results ?? []).map((k: { kpi_number: number; kpi_name: string; value: number; unit: string; traffic_light: string }) => ({
+                id: k.kpi_number,
+                name: k.kpi_name,
+                value: Number(k.value),
+                unit: k.unit,
+                light: k.traffic_light as TrafficLight,
+              })),
+            }))
+            .filter(s => s.kpis.length > 0)
+            .sort((a, b) => a.year - b.year)
+          setHistoricalKpis(matching)
+        }
+      }
 
       // Hämta sparad AI-analys
       const { data: aiRows } = await supabase
@@ -319,7 +365,12 @@ export default function ResultsPage() {
       const res = await fetch('/api/ai-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kpis, answers, surveyId }),
+        body: JSON.stringify({
+          kpis,
+          answers,
+          surveyId,
+          historical: historicalKpis.map(h => ({ year: h.year, kpis: h.kpis })),
+        }),
       })
       const data = await res.json()
       if (data.error) {
@@ -418,8 +469,15 @@ export default function ResultsPage() {
                       <p className={`text-xs font-semibold ${c.text}`}>{c.label}</p>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 text-right flex items-center">
                     <p className={`text-xl font-bold ${c.text}`}>{fmt(kpi.value, kpi.unit)}</p>
+                    {(() => {
+                      if (historicalKpis.length === 0) return null
+                      const prevYear = historicalKpis[historicalKpis.length - 1]
+                      const prevKpi = prevYear.kpis.find(k => k.id === kpi.id)
+                      if (!prevKpi) return null
+                      return <TrendArrow kpiId={kpi.id} current={kpi.value} previous={prevKpi.value} />
+                    })()}
                   </div>
                 </div>
 
@@ -434,6 +492,73 @@ export default function ResultsPage() {
             )
           })}
         </div>
+
+        {/* Trend-jämförelse */}
+        {historicalKpis.length > 0 && (
+          <div className="mb-12">
+            <button
+              onClick={() => setShowTrend(!showTrend)}
+              className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors mb-4"
+            >
+              <svg className={`w-4 h-4 transition-transform ${showTrend ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              Jämför med tidigare år ({historicalKpis.length} {historicalKpis.length === 1 ? 'år' : 'år'})
+            </button>
+            {showTrend && (
+              <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left text-white/50 font-medium px-4 py-3">Nyckeltal</th>
+                        {historicalKpis.map(h => (
+                          <th key={h.year} className="text-right text-white/50 font-medium px-4 py-3">{h.year}</th>
+                        ))}
+                        <th className="text-right text-blue-400 font-bold px-4 py-3">{surveyMeta?.survey_year ?? 'Nu'}</th>
+                        <th className="text-right text-white/50 font-medium px-4 py-3">Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kpis.map(kpi => {
+                        const allYears = [...historicalKpis.map(h => {
+                          const k = h.kpis.find(k => k.id === kpi.id)
+                          return k ? k.value : null
+                        }), kpi.value]
+                        const prev = historicalKpis.length > 0
+                          ? historicalKpis[historicalKpis.length - 1].kpis.find(k => k.id === kpi.id)
+                          : null
+
+                        return (
+                          <tr key={kpi.id} className="border-b border-white/5">
+                            <td className="px-4 py-2.5 text-white/70">
+                              <span className="text-white/40 text-xs mr-1.5">{kpi.id}.</span>
+                              {kpi.name}
+                            </td>
+                            {historicalKpis.map(h => {
+                              const k = h.kpis.find(k => k.id === kpi.id)
+                              return (
+                                <td key={h.year} className="text-right px-4 py-2.5 text-white/50 font-mono text-xs">
+                                  {k ? fmt(k.value, kpi.unit) : '–'}
+                                </td>
+                              )
+                            })}
+                            <td className={`text-right px-4 py-2.5 font-mono text-xs font-bold ${LIGHT_COLORS[kpi.light].text}`}>
+                              {fmt(kpi.value, kpi.unit)}
+                            </td>
+                            <td className="text-right px-4 py-2.5">
+                              {prev && <TrendArrow kpiId={kpi.id} current={kpi.value} previous={prev.value} />}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* AI-analys – generera eller visa */}
         {!aiAnalysis ? (

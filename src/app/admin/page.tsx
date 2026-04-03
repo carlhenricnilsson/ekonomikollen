@@ -182,6 +182,29 @@ export default function AdminPage() {
 
   const availableYears = [...new Set(surveys.map(s => s.survey_year))].sort((a, b) => b - a)
 
+  // Gruppera undersökningar per BRF-namn
+  type BrfGroup = { name: string; surveys: Survey[] }
+  const grouped: BrfGroup[] = (() => {
+    const map = new Map<string, Survey[]>()
+    for (const s of filteredSurveys) {
+      // Extrahera basnamn utan år (t.ex. "BRF Solgläntan")
+      const fullName = s.brf_name ?? `Enkät`
+      const baseName = fullName.replace(/\s+\d{4}$/, '').trim() || fullName
+      if (!map.has(baseName)) map.set(baseName, [])
+      map.get(baseName)!.push(s)
+    }
+    // Sortera varje grupp efter år (nyaste först)
+    const groups: BrfGroup[] = []
+    for (const [name, surveys] of map) {
+      surveys.sort((a, b) => b.survey_year - a.survey_year)
+      groups.push({ name, surveys })
+    }
+    groups.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1)
+    return groups
+  })()
+
+  const [expandedBrf, setExpandedBrf] = useState<Set<string>>(new Set())
+
   function copyLink(surveyId: string, token: string) {
     const link = `${window.location.origin}/survey?token=${token}`
     try {
@@ -431,9 +454,9 @@ export default function AdminPage() {
           </div>
           <div className="bg-white/5 border border-white/10 rounded-xl p-5">
             <p className="text-3xl font-bold text-blue-400">
-              {new Set(surveys.map(s => s.survey_year)).size}
+              {new Set(surveys.map(s => (s.brf_name ?? '').replace(/\s+\d{4}$/, '').trim())).size}
             </p>
-            <p className="text-white/40 text-sm mt-1">Unika år</p>
+            <p className="text-white/40 text-sm mt-1">Unika BRF:er</p>
           </div>
         </div>
 
@@ -481,66 +504,137 @@ export default function AdminPage() {
             <p className="text-lg mb-2">Inga enkäter ännu</p>
             <p className="text-sm">Enkäter visas här när BRF:er fyller i dem</p>
           </div>
-        ) : filteredSurveys.length === 0 ? (
+        ) : grouped.length === 0 ? (
           <div className="text-center py-16 text-white/30">
             <p className="text-lg mb-2">Inga träffar</p>
             <p className="text-sm">Prova ett annat sökord eller år</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredSurveys.map(survey => {
-              const kpis = survey.kpi_results ?? []
-              const reds = kpis.filter(k => k.traffic_light === 'red').length
-              const yellows = kpis.filter(k => k.traffic_light === 'yellow').length
-              const greens = kpis.filter(k => k.traffic_light === 'green').length
+            {grouped.map(group => {
+              const isMultiYear = group.surveys.length > 1
+              const isExpanded = expandedBrf.has(group.name)
+              const latest = group.surveys[0]
+              const latestKpis = latest.kpi_results ?? []
 
               return (
-                <div key={survey.id} className="bg-white/5 border border-white/10 rounded-xl p-5 flex items-center justify-between hover:bg-white/8 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-blue-500/20 rounded-lg w-10 h-10 flex items-center justify-center text-blue-400 font-bold text-sm">
-                      {survey.survey_year}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{survey.brf_name || `Enkät ${survey.survey_year}`}</p>
-                        {(survey.version ?? 1) > 1 && (
-                          <span className="text-xs bg-white/10 text-white/50 px-1.5 py-0.5 rounded">ver.{survey.version}</span>
-                        )}
+                <div key={group.name} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                  {/* Grupp-header */}
+                  <div
+                    className={`p-5 flex items-center justify-between ${isMultiYear ? 'cursor-pointer hover:bg-white/[0.03]' : ''} transition-colors`}
+                    onClick={() => {
+                      if (!isMultiYear) return
+                      setExpandedBrf(prev => {
+                        const next = new Set(prev)
+                        next.has(group.name) ? next.delete(group.name) : next.add(group.name)
+                        return next
+                      })
+                    }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="bg-blue-500/20 rounded-lg w-10 h-10 flex items-center justify-center text-blue-400 font-bold text-sm">
+                        {latest.survey_year}
                       </div>
-                      <p className="text-white/30 text-xs mt-0.5">
-                        {survey.survey_year} · {new Date(survey.created_at).toLocaleDateString('sv-SE')} · <span className={survey.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}>{survey.status === 'completed' ? 'Genomförd' : 'Väntar'}</span>
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{group.name}</p>
+                          {isMultiYear && (
+                            <span className="text-xs bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full font-medium">
+                              {group.surveys.length} år
+                            </span>
+                          )}
+                          {(latest.version ?? 1) > 1 && (
+                            <span className="text-xs bg-white/10 text-white/50 px-1.5 py-0.5 rounded">ver.{latest.version}</span>
+                          )}
+                        </div>
+                        <p className="text-white/30 text-xs mt-0.5">
+                          {isMultiYear
+                            ? `${group.surveys[group.surveys.length - 1].survey_year}–${latest.survey_year}`
+                            : `${latest.survey_year}`
+                          } · <span className={latest.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}>{latest.status === 'completed' ? 'Genomförd' : 'Väntar'}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      {latestKpis.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          {[...Array(7)].map((_, i) => {
+                            const kpi = latestKpis.find(k => k.kpi_number === i + 1)
+                            return <div key={i} className={`w-2.5 h-2.5 rounded-full ${kpi ? lightDot(kpi.traffic_light) : 'bg-white/10'}`} />
+                          })}
+                        </div>
+                      )}
+                      <div className="flex gap-2 text-xs">
+                        {latestKpis.filter(k => k.traffic_light === 'green').length > 0 && <span className="text-green-400">{latestKpis.filter(k => k.traffic_light === 'green').length} bra</span>}
+                        {latestKpis.filter(k => k.traffic_light === 'yellow').length > 0 && <span className="text-yellow-400">{latestKpis.filter(k => k.traffic_light === 'yellow').length} bevaka</span>}
+                        {latestKpis.filter(k => k.traffic_light === 'red').length > 0 && <span className="text-red-400">{latestKpis.filter(k => k.traffic_light === 'red').length} varning</span>}
+                      </div>
+                      {!isMultiYear && latest.token && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); copyLink(latest.id, latest.token) }}
+                          className={`text-xs transition-colors ${copiedId === latest.id ? 'text-green-400' : 'text-white/40 hover:text-white'}`}
+                        >
+                          {copiedId === latest.id ? '✓ Kopierad' : 'Kopiera länk'}
+                        </button>
+                      )}
+                      {!isMultiYear ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push(`/results/${latest.id}`) }}
+                          className="text-xs text-white/40 hover:text-white transition-colors"
+                        >
+                          Visa →
+                        </button>
+                      ) : (
+                        <svg className={`w-4 h-4 text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    {kpis.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        {[...Array(7)].map((_, i) => {
-                          const kpi = kpis.find(k => k.kpi_number === i + 1)
-                          return <div key={i} className={`w-2.5 h-2.5 rounded-full ${kpi ? lightDot(kpi.traffic_light) : 'bg-white/10'}`} />
-                        })}
-                      </div>
-                    )}
-                    <div className="flex gap-2 text-xs">
-                      {greens > 0 && <span className="text-green-400">{greens} bra</span>}
-                      {yellows > 0 && <span className="text-yellow-400">{yellows} bevaka</span>}
-                      {reds > 0 && <span className="text-red-400">{reds} varning</span>}
+
+                  {/* Expanderade år */}
+                  {isMultiYear && isExpanded && (
+                    <div className="border-t border-white/10">
+                      {group.surveys.map(survey => {
+                        const kpis = survey.kpi_results ?? []
+                        return (
+                          <div key={survey.id} className="px-5 py-3 flex items-center justify-between border-b border-white/5 last:border-b-0 hover:bg-white/[0.03] transition-colors">
+                            <div className="flex items-center gap-3 pl-14">
+                              <span className="text-sm font-medium text-white/70">{survey.survey_year}</span>
+                              <span className="text-xs text-white/30">{new Date(survey.created_at).toLocaleDateString('sv-SE')}</span>
+                              <span className={`text-xs ${survey.status === 'completed' ? 'text-green-400/70' : 'text-yellow-400/70'}`}>
+                                {survey.status === 'completed' ? 'Genomförd' : 'Väntar'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-6">
+                              {kpis.length > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  {[...Array(7)].map((_, i) => {
+                                    const kpi = kpis.find(k => k.kpi_number === i + 1)
+                                    return <div key={i} className={`w-2 h-2 rounded-full ${kpi ? lightDot(kpi.traffic_light) : 'bg-white/10'}`} />
+                                  })}
+                                </div>
+                              )}
+                              {survey.token && (
+                                <button
+                                  onClick={() => copyLink(survey.id, survey.token)}
+                                  className={`text-xs transition-colors ${copiedId === survey.id ? 'text-green-400' : 'text-white/40 hover:text-white'}`}
+                                >
+                                  {copiedId === survey.id ? '✓ Kopierad' : 'Kopiera länk'}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => router.push(`/results/${survey.id}`)}
+                                className="text-xs text-white/40 hover:text-white transition-colors"
+                              >
+                                Visa →
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                    {survey.token && (
-                      <button
-                        onClick={() => copyLink(survey.id, survey.token)}
-                        className={`text-xs transition-colors ${copiedId === survey.id ? 'text-green-400' : 'text-white/40 hover:text-white'}`}
-                      >
-                        {copiedId === survey.id ? '✓ Kopierad' : 'Kopiera länk'}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => router.push(`/results/${survey.id}`)}
-                      className="text-xs text-white/40 hover:text-white transition-colors"
-                    >
-                      Visa →
-                    </button>
-                  </div>
+                  )}
                 </div>
               )
             })}
