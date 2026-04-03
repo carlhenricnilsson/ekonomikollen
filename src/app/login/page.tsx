@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [brfName, setBrfName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -46,6 +47,12 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
+    if (!brfName.trim()) {
+      setError('Ange din BRF:s namn')
+      setLoading(false)
+      return
+    }
+
     if (password.length < 6) {
       setError('Lösenordet måste vara minst 6 tecken')
       setLoading(false)
@@ -78,7 +85,7 @@ export default function LoginPage() {
         await fetch('/api/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: signUpData.user.id, email }),
+          body: JSON.stringify({ user_id: signUpData.user.id, email, brf_name: brfName.trim() }),
         })
       } catch {
         // Icke-kritiskt – profilen skapas ändå vid nästa inloggning
@@ -189,6 +196,18 @@ export default function LoginPage() {
 
         {mode === 'register' && (
           <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="block text-sm text-white/70 mb-1.5">Vilken BRF tillhör du?</label>
+              <input
+                type="text"
+                value={brfName}
+                onChange={e => setBrfName(e.target.value)}
+                required
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400 transition-colors"
+                placeholder="T.ex. BRF Solgläntan"
+              />
+              <p className="text-white/30 text-xs mt-1">Namnet normaliseras automatiskt till formatet "BRF Namn"</p>
+            </div>
             <div>
               <label className="block text-sm text-white/70 mb-1.5">E-post</label>
               <input
