@@ -80,6 +80,14 @@ export default function LoginPage() {
       return
     }
 
+    // Supabase returnerar ett user-objekt även om e-posten redan finns
+    // (anti-enumeration). Kontrollera identities-arrayen för att upptäcka det.
+    if (signUpData?.user && (signUpData.user.identities?.length ?? 0) === 0) {
+      setError('E-postadressen är redan registrerad. Testa att logga in istället.')
+      setLoading(false)
+      return
+    }
+
     if (signUpData?.user) {
       // Sätt upp profil och inbjudningar via server-side API (kringgår RLS)
       try {
