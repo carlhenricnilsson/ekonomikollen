@@ -60,6 +60,23 @@ export default function LoginPage() {
       return
     }
 
+    // Pre-check: finns e-posten redan? (Server-side via admin-API)
+    try {
+      const checkRes = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const checkJson = await checkRes.json()
+      if (checkJson.exists) {
+        setError('E-postadressen är redan registrerad. Testa att logga in istället.')
+        setLoading(false)
+        return
+      }
+    } catch {
+      // Om check misslyckas går vi vidare och låter signUp hantera det
+    }
+
     let signUpData
     try {
       const result = await supabase.auth.signUp({ email, password })
