@@ -10,25 +10,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Saknar e-post' }, { status: 400 })
   }
 
-  const normalized = email.trim().toLowerCase()
-
-  // listUsers stödjer inte filter på e-post direkt i alla versioner,
-  // så vi paginerar och matchar. I praktiken räcker första sidan
-  // för de flesta projekt, men vi loopar för säkerhets skull.
-  let page = 1
-  const perPage = 1000
-  while (true) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    const found = data.users.find(u => (u.email ?? '').toLowerCase() === normalized)
-    if (found) {
-      return NextResponse.json({ exists: true })
-    }
-    if (data.users.length < perPage) break
-    page++
+  // Verifiera att service-role-nyckel finns
+  if (!process.env.SUPABASE_SECRET_KEY) {
+    console.error('[check-email] SUPABASE_SECRET_KEY saknas')
+    return NextResponse.json(
+      { error: 'Server-konfiguration saknas (SUPABASE_SECRET_KEY)' },
+      { status: 500 }
+    )
   }
 
-  return NextResponse.json({ exists: false })
+  const normalized = email.trim().toLowerCase()
+
+  try {
+    let page = 1
+    const perPage = 1000
+    while (true) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+      if (error) {
+        console.error('[check-email] listUsers error:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      const found = data.users.find(u => (u.email ?? '').toLowerCase() === normalized)
+      if (found) {
+        return NextResponse.json({ exists: true })
+      }
+      if (data.users.length < perPage) break
+      page++
+    }
+    return NextResponse.json({ exists: false })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[check-email] unexpected:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

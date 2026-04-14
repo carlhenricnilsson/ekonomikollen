@@ -61,6 +61,7 @@ export default function LoginPage() {
     }
 
     // Pre-check: finns e-posten redan? (Server-side via admin-API)
+    // Fail-closed: om checken failar tillåter vi inte registrering.
     try {
       const checkRes = await fetch('/api/check-email', {
         method: 'POST',
@@ -68,13 +69,20 @@ export default function LoginPage() {
         body: JSON.stringify({ email }),
       })
       const checkJson = await checkRes.json()
+      if (!checkRes.ok) {
+        setError(`Kunde inte verifiera e-post: ${checkJson.error ?? 'okänt fel'}`)
+        setLoading(false)
+        return
+      }
       if (checkJson.exists) {
         setError('E-postadressen är redan registrerad. Testa att logga in istället.')
         setLoading(false)
         return
       }
-    } catch {
-      // Om check misslyckas går vi vidare och låter signUp hantera det
+    } catch (e) {
+      setError(`Kunde inte nå servern för e-postkoll: ${e instanceof Error ? e.message : 'okänt fel'}`)
+      setLoading(false)
+      return
     }
 
     let signUpData
