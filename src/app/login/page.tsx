@@ -60,80 +60,40 @@ export default function LoginPage() {
       return
     }
 
-    // Pre-check: finns e-posten redan? (Server-side via admin-API)
-    // Fail-closed: om checken failar tillåter vi inte registrering.
+    // Skapa konto via server-side admin-API. Auto-bekräftar e-posten så
+    // att användaren kan logga in direkt, och returnerar tydligt fel om
+    // e-posten redan finns.
     try {
-      const checkRes = await fetch('/api/check-email', {
+      const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          password,
+          brf_name: brfName.trim(),
+          phone: phone.trim(),
+        }),
       })
-      const checkJson = await checkRes.json()
-      if (!checkRes.ok) {
-        setError(`Kunde inte verifiera e-post: ${checkJson.error ?? 'okänt fel'}`)
-        setLoading(false)
-        return
-      }
-      if (checkJson.exists) {
-        setError('E-postadressen är redan registrerad. Testa att logga in istället.')
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error ?? 'Kunde inte skapa konto')
         setLoading(false)
         return
       }
     } catch (e) {
-      setError(`Kunde inte nå servern för e-postkoll: ${e instanceof Error ? e.message : 'okänt fel'}`)
+      setError(`Kunde inte nå servern: ${e instanceof Error ? e.message : 'okänt fel'}`)
       setLoading(false)
       return
     }
 
-    let signUpData
-    try {
-      const result = await supabase.auth.signUp({ email, password })
-      if (result.error) {
-        const msg = result.error.message
-        if (msg.includes('already registered') || msg.includes('already been registered')) {
-          setError('E-postadressen är redan registrerad. Testa att logga in istället.')
-        } else {
-          setError(msg)
-        }
-        setLoading(false)
-        return
-      }
-      signUpData = result.data
-    } catch {
-      setError('Kunde inte ansluta till servern. Försök igen.')
+    // Logga in direkt (kontot är redan auto-bekräftat)
+    const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+    if (loginError) {
+      setError(`Konto skapat men kunde inte logga in automatiskt: ${loginError.message}`)
       setLoading(false)
       return
     }
-
-    // Supabase returnerar ett user-objekt även om e-posten redan finns
-    // (anti-enumeration). Kontrollera identities-arrayen för att upptäcka det.
-    if (signUpData?.user && (signUpData.user.identities?.length ?? 0) === 0) {
-      setError('E-postadressen är redan registrerad. Testa att logga in istället.')
-      setLoading(false)
-      return
-    }
-
-    if (signUpData?.user) {
-      // Sätt upp profil och inbjudningar via server-side API (kringgår RLS)
-      try {
-        await fetch('/api/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: signUpData.user.id, email, brf_name: brfName.trim(), phone: phone.trim() }),
-        })
-      } catch {
-        // Icke-kritiskt – profilen skapas ändå vid nästa inloggning
-      }
-
-      // Logga in direkt
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
-      if (loginError) {
-        setMessage('Konto skapat! Kontrollera din e-post för att verifiera kontot, logga sedan in.')
-        setMode('login')
-      } else {
-        router.push('/dashboard')
-      }
-    }
+    router.push('/dashboard')
     setLoading(false)
   }
 

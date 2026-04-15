@@ -16,10 +16,43 @@ function normalizeBrfBaseName(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { user_id, email, brf_name, phone } = await req.json()
+  const { email, password, brf_name, phone } = await req.json()
 
-  if (!user_id || !email) {
-    return NextResponse.json({ error: 'Saknar data' }, { status: 400 })
+  if (!email || !password) {
+    return NextResponse.json({ error: 'Saknar e-post eller lösenord' }, { status: 400 })
+  }
+
+  if (!process.env.SUPABASE_SECRET_KEY) {
+    return NextResponse.json(
+      { error: 'Server-konfiguration saknas (SUPABASE_SECRET_KEY)' },
+      { status: 500 }
+    )
+  }
+
+  // Skapa användare via admin-API. Auto-bekräfta e-post så att användaren
+  // kan logga in direkt utan verifieringsmejl (undviker localhost-redirect).
+  const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email: email.toLowerCase(),
+    password,
+    email_confirm: true,
+  })
+
+  if (createError) {
+    const msg = createError.message ?? ''
+    // Supabase-felmeddelandet innehåller vanligtvis "already been registered"
+    // eller liknande. Vi surfacar det som 409.
+    if (/already|registered|exists|duplicate/i.test(msg)) {
+      return NextResponse.json(
+        { error: 'E-postadressen är redan registrerad. Testa att logga in istället.' },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json({ error: msg || 'Kunde inte skapa konto' }, { status: 500 })
+  }
+
+  const user_id = created.user?.id
+  if (!user_id) {
+    return NextResponse.json({ error: 'Inget user_id returnerades' }, { status: 500 })
   }
 
   // Skapa user_profile som brf_admin
@@ -57,5 +90,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, user_id })
 }
