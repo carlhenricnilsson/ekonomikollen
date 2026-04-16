@@ -248,7 +248,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
             >
-              {loading ? 'Skapar konto...' : 'Skapa konto'}
+              {loading ? 'Skapar konto...' : 'Registrera konto'}
             </button>
 
             <p className="text-center text-sm text-white/40">
