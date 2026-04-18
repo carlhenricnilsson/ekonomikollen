@@ -21,10 +21,21 @@ function LoginForm() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  // Detektera ?reset=true i URL:en (efter klick på återställningslänk)
+  // Detektera ?reset=true och etablera Supabase-session från URL-hash
   useEffect(() => {
-    if (searchParams.get('reset') === 'true') {
-      setMode('reset')
+    if (searchParams.get('reset') !== 'true') return
+    setMode('reset')
+
+    // Supabase skickar access_token i URL-hashen (#access_token=...&type=recovery)
+    // Next.js App Router hanterar inte detta automatiskt — vi läser det manuellt.
+    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    if (hash) {
+      const params = new URLSearchParams(hash.replace('#', ''))
+      const accessToken = params.get('access_token')
+      const refreshToken = params.get('refresh_token')
+      if (accessToken && refreshToken) {
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+      }
     }
   }, [searchParams])
 
