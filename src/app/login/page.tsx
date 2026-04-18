@@ -20,29 +20,33 @@ function LoginForm() {
   const [message, setMessage] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [resetReady, setResetReady] = useState(false)
 
-  // Detektera ?reset=true och etablera Supabase-session från URL-hash
+  // Lyssna på PASSWORD_RECOVERY-event från Supabase (hanterar hash automatiskt)
   useEffect(() => {
-    if (searchParams.get('reset') !== 'true') return
-    setMode('reset')
-
-    // Supabase skickar access_token i URL-hashen (#access_token=...&type=recovery)
-    // Next.js App Router hanterar inte detta automatiskt — vi läser det manuellt.
-    const hash = typeof window !== 'undefined' ? window.location.hash : ''
-    if (hash) {
-      const params = new URLSearchParams(hash.replace('#', ''))
-      const accessToken = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
-      if (accessToken && refreshToken) {
-        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('reset')
+        setResetReady(true)
       }
+    })
+    // Visa reset-formulär om ?reset=true finns i URL:en
+    if (searchParams.get('reset') === 'true') {
+      setMode('reset')
     }
+    return () => subscription.unsubscribe()
   }, [searchParams])
 
   async function handleResetPassword(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    if (!resetReady) {
+      setError('Sessionen är inte redo. Vänta några sekunder och försök igen.')
+      setLoading(false)
+      return
+    }
 
     if (newPassword.length < 6) {
       setError('Lösenordet måste vara minst 6 tecken')
