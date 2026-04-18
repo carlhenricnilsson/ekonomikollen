@@ -148,7 +148,11 @@ function LoginForm() {
     })
 
     if (error) {
-      setError(`Fel: ${error.message}`)
+      if (error.message.toLowerCase().includes('rate limit')) {
+        setError('För många försök. Vänta några minuter och försök igen.')
+      } else {
+        setError('Kunde inte skicka återställningslänk. Kontrollera e-postadressen.')
+      }
     } else {
       setMessage('En länk för att återställa lösenordet har skickats till din e-post.')
     }
