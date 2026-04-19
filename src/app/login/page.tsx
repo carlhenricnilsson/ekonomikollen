@@ -22,18 +22,21 @@ function LoginForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [resetReady, setResetReady] = useState(false)
 
-  // Lyssna på PASSWORD_RECOVERY-event från Supabase (hanterar hash automatiskt)
   useEffect(() => {
+    if (searchParams.get('reset') !== 'true') return
+    setMode('reset')
+
+    // Kolla om sessionen redan finns (eventet kan ha avfyrats innan lyssnaren registrerades)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setResetReady(true)
+    })
+
+    // Lyssna även på framtida events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setMode('reset')
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
         setResetReady(true)
       }
     })
-    // Visa reset-formulär om ?reset=true finns i URL:en
-    if (searchParams.get('reset') === 'true') {
-      setMode('reset')
-    }
     return () => subscription.unsubscribe()
   }, [searchParams])
 
@@ -41,12 +44,6 @@ function LoginForm() {
     e.preventDefault()
     setLoading(true)
     setError('')
-
-    if (!resetReady) {
-      setError('Sessionen är inte redo. Vänta några sekunder och försök igen.')
-      setLoading(false)
-      return
-    }
 
     if (newPassword.length < 6) {
       setError('Lösenordet måste vara minst 6 tecken')
