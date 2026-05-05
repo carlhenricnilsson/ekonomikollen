@@ -80,8 +80,8 @@ const s = StyleSheet.create({
   marker:       { position: 'absolute', top: -4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#0f172a' },
   scaleLabels:  { position: 'relative', height: 10, marginTop: 2 },
   lblL:         { position: 'absolute', left: 0, fontSize: 7, color: '#64748b' },
-  lblG:         { position: 'absolute', left: '20%', fontSize: 7, color: '#4ade80', fontFamily: 'Helvetica-Bold', transform: 'translateX(-50%)' },
-  lblR:         { position: 'absolute', left: '80%', fontSize: 7, color: '#f87171', fontFamily: 'Helvetica-Bold', transform: 'translateX(-50%)' },
+  lblG:         { position: 'absolute', left: '20%', marginLeft: -20, width: 40, textAlign: 'center', fontSize: 7, color: '#4ade80', fontFamily: 'Helvetica-Bold' },
+  lblR:         { position: 'absolute', left: '80%', marginLeft: -20, width: 40, textAlign: 'center', fontSize: 7, color: '#f87171', fontFamily: 'Helvetica-Bold' },
   lblE:         { position: 'absolute', right: 0, fontSize: 7, color: '#64748b' },
   // Footer
   footer:       { position: 'absolute', bottom: 18, left: 32, right: 32, flexDirection: 'row', justifyContent: 'space-between', borderTop: '1 solid #1e293b', paddingTop: 6 },
