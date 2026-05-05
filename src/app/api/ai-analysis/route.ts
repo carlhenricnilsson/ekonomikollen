@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
-// Claude Opus tar 30-60s för 8000 tokens. Vercel default är 10s vilket räcker inte.
+// Streaming håller connection vid liv. Vercel default-timeout (10s) räcker
+// inte för Opus med 8000 tokens — vi sätter 60s som säkerhetsmarginal,
+// men streamen levererar redan tokens långt innan dess.
 export const maxDuration = 60
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -19,9 +21,6 @@ export async function POST(req: NextRequest) {
   const { kpis, answers, surveyId, historical } = await req.json()
   const histData = (historical ?? []) as { year: number; kpis: KPI[] }[]
 
-  const redKPIs = kpis.filter((k: KPI) => k.light === 'red')
-  const yellowKPIs = kpis.filter((k: KPI) => k.light === 'yellow')
-
   // Hämta fritextsvar
   const freeTexts = [
     answers.F3_cashflow_plan ? `Kassaflödesplan: "${answers.F3_cashflow_plan}"` : null,
@@ -35,7 +34,6 @@ export async function POST(req: NextRequest) {
   const feeIncrease = answers.G2_fee_increase
   const surveyYear = answers.A1_year
 
-  // Bygg historisk sektion om data finns
   const histSection = histData.length > 0 ? `
 
 HISTORISKA NYCKELTAL (tidigare år för samma BRF):
@@ -94,27 +92,48 @@ VIKTIGA FORMATERINGSREGLER:
 - Använd INTE tabeller (|kolumn|kolumn|)
 - Använd enkel punktlista (- punkt) om du listar saker`
 
-  try {
-    const message = await client.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 8000,
-      messages: [{ role: 'user', content: prompt }],
-    })
+  const encoder = new TextEncoder()
+  let fullText = ''
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const anthropicStream = client.messages.stream({
+          model: 'claude-opus-4-6',
+          max_tokens: 8000,
+          messages: [{ role: 'user', content: prompt }],
+        })
 
-    // Spara till databasen om surveyId finns
-    if (surveyId) {
-      await supabaseAdmin.from('ai_analyses').insert({
-        survey_id: surveyId,
-        analysis_text: text,
-        model: 'claude-opus-4-6',
-      })
-    }
+        for await (const event of anthropicStream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            const chunk = event.delta.text
+            fullText += chunk
+            controller.enqueue(encoder.encode(chunk))
+          }
+        }
 
-    return NextResponse.json({ analysis: text })
-  } catch (error) {
-    console.error('Claude API error:', error)
-    return NextResponse.json({ error: 'Kunde inte generera analys' }, { status: 500 })
-  }
+        // Spara till databasen om surveyId finns
+        if (surveyId && fullText) {
+          await supabaseAdmin.from('ai_analyses').insert({
+            survey_id: surveyId,
+            analysis_text: fullText,
+            model: 'claude-opus-4-6',
+          })
+        }
+
+        controller.close()
+      } catch (error) {
+        console.error('Claude API stream error:', error)
+        controller.error(error)
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }

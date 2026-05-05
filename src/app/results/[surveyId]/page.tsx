@@ -327,6 +327,7 @@ export default function ResultsPage() {
   async function generateAnalysis() {
     setAiLoading(true)
     setAiError('')
+    setAiAnalysis('')
     setShowRegenConfirm(false)
     try {
       const res = await fetch('/api/ai-analysis', {
@@ -339,14 +340,29 @@ export default function ResultsPage() {
           historical: historicalKpis.map(h => ({ year: h.year, kpis: h.kpis })),
         }),
       })
-      const data = await res.json()
-      if (data.error) {
-        setAiError(data.error)
-      } else {
-        setAiAnalysis(data.analysis)
-        setAiSavedAt(new Date().toISOString())
-        setTimeout(() => document.getElementById('ai-section')?.scrollIntoView({ behavior: 'smooth' }), 100)
+
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => '')
+        setAiError(text || 'Något gick fel vid AI-analysen.')
+        return
       }
+
+      // Streama in svaret tecken för tecken
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let acc = ''
+      // Scrolla till AI-sektionen så användaren ser texten skrivas
+      setTimeout(() => document.getElementById('ai-section')?.scrollIntoView({ behavior: 'smooth' }), 50)
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        acc += decoder.decode(value, { stream: true })
+        setAiAnalysis(acc)
+      }
+      acc += decoder.decode()
+      setAiAnalysis(acc)
+      setAiSavedAt(new Date().toISOString())
     } catch {
       setAiError('Något gick fel – kontrollera din API-nyckel.')
     } finally {
