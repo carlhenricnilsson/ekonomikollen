@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
+// Claude Opus tar 30-60s för 8000 tokens. Vercel default är 10s vilket räcker inte.
+export const maxDuration = 60
+
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 type KPI = { id: number; name: string; value: number; unit: string; light: string }
