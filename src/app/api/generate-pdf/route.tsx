@@ -219,12 +219,12 @@ export async function GET(req: NextRequest) {
               <View style={s.scaleWrap}>
                 <View style={s.scaleBar}>
                   {/* 0-10%: dashed green (full color) */}
-                  <View style={{ width: '10%' }}>
-                    <View style={s.dashZoneRow}>
-                      {[0,1,2,3,4,5,6,7].map(i => (
-                        <View key={i} style={i % 2 === 0 ? s.dashCellOn : s.dashCellOff} />
-                      ))}
-                    </View>
+                  <View style={{ width: '10%', height: 6, flexDirection: 'row' }}>
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1 }} />
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1 }} />
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
                   </View>
                   {/* 10-20%: solid green */}
                   <View style={[s.zGreen,  { width: '10%' }]} />
@@ -233,12 +233,12 @@ export async function GET(req: NextRequest) {
                   {/* 80-90%: solid red */}
                   <View style={[s.zRed,    { width: '10%' }]} />
                   {/* 90-100%: dashed red (full color) */}
-                  <View style={{ width: '10%' }}>
-                    <View style={s.dashZoneRow}>
-                      {[0,1,2,3,4,5,6,7].map(i => (
-                        <View key={i} style={i % 2 === 0 ? s.dashCellOnR : s.dashCellOff} />
-                      ))}
-                    </View>
+                  <View style={{ width: '10%', height: 6, flexDirection: 'row' }}>
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1 }} />
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1 }} />
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
                   </View>
                 </View>
                 {/* Marker dot */}
