@@ -59,11 +59,6 @@ function clampP(p: number): number {
   return p
 }
 
-// Värdet vid skalans ytterkanter (pos 0 och 100)
-function edgeVal(pos: 0 | 100, t: Thresh): number {
-  return t.green + (pos - 20) * (t.red - t.green) / 60
-}
-
 function fmtScaleLabel(v: number, unit: string): string {
   if (unit === '%') return `${Math.round(v)}%`
   const r = Math.round(v)
@@ -72,14 +67,12 @@ function fmtScaleLabel(v: number, unit: string): string {
   return `${r}`
 }
 
-// Streckad bakgrund via CSS gradient
-const DASH_GREEN = 'repeating-linear-gradient(90deg, rgba(74,222,128,0.45) 0,rgba(74,222,128,0.45) 4px,transparent 4px,transparent 8px)'
-const DASH_RED   = 'repeating-linear-gradient(90deg, rgba(248,113,113,0.45) 0,rgba(248,113,113,0.45) 4px,transparent 4px,transparent 8px)'
+// Streckad bakgrund via CSS gradient – full opacitet, 4 streck per zon (matchar PDF)
+const DASH_GREEN = 'repeating-linear-gradient(90deg, #4ade80 0,#4ade80 6%,transparent 6%,transparent 12.5%)'
+const DASH_RED   = 'repeating-linear-gradient(90deg, #f87171 0,#f87171 6%,transparent 6%,transparent 12.5%)'
 
 function KpiScale({ kpi, thresh }: { kpi: KPI; thresh: Thresh }) {
   const mp = clampP(rawP(kpi.value, thresh))
-  const v0   = edgeVal(0,   thresh)
-  const v100 = edgeVal(100, thresh)
   const dotColor = kpi.light === 'green' ? '#4ade80'
                  : kpi.light === 'yellow' ? '#facc15'
                  : kpi.light === 'red'    ? '#f87171'
@@ -87,37 +80,32 @@ function KpiScale({ kpi, thresh }: { kpi: KPI; thresh: Thresh }) {
 
   return (
     <div className="mt-3 select-none">
-      {/* Stapeln */}
-      <div className="relative h-3 overflow-visible">
-        {/* 0–10 %: streckad grön */}
+      {/* Stapeln – 30% tunnare (h-2 istället för h-3) */}
+      <div className="relative h-2 overflow-visible">
+        {/* 0–10 %: streckad grön (full färg) */}
         <div className="absolute inset-y-0 flex items-center" style={{ left: '0%', width: '10%' }}>
-          <div className="w-full h-[3px] rounded-l-full" style={{ background: DASH_GREEN }} />
+          <div className="w-full h-full rounded-l-full" style={{ background: DASH_GREEN }} />
         </div>
         {/* 10–20 %: solid grön */}
-        <div className="absolute inset-y-0 bg-green-500/40" style={{ left: '10%', width: '10%' }} />
+        <div className="absolute inset-y-0 bg-green-500/85" style={{ left: '10%', width: '10%' }} />
         {/* 20–80 %: solid gul */}
-        <div className="absolute inset-y-0 bg-yellow-500/40" style={{ left: '20%', width: '60%' }} />
+        <div className="absolute inset-y-0 bg-yellow-500/65" style={{ left: '20%', width: '60%' }} />
         {/* 80–90 %: solid röd */}
-        <div className="absolute inset-y-0 bg-red-500/40" style={{ left: '80%', width: '10%' }} />
-        {/* 90–100 %: streckad röd */}
+        <div className="absolute inset-y-0 bg-red-500/85" style={{ left: '80%', width: '10%' }} />
+        {/* 90–100 %: streckad röd (full färg) */}
         <div className="absolute inset-y-0 flex items-center" style={{ left: '90%', width: '10%' }}>
-          <div className="w-full h-[3px] rounded-r-full" style={{ background: DASH_RED }} />
+          <div className="w-full h-full rounded-r-full" style={{ background: DASH_RED }} />
         </div>
-        {/* Vertikala gränssträck vid pos 20 och 80 */}
-        <div className="absolute inset-y-0 w-px bg-white/20" style={{ left: '20%' }} />
-        <div className="absolute inset-y-0 w-px bg-white/20" style={{ left: '80%' }} />
-        {/* Markörpunkt */}
+        {/* Markörpunkt – större (w-5 h-5) */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-slate-900 shadow-lg z-10"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full border-2 border-slate-900 shadow-lg z-10"
           style={{ left: `${mp}%`, backgroundColor: dotColor }}
         />
       </div>
-      {/* Etiketter: pos 0, 20, 80, 100 */}
-      <div className="relative h-4 mt-0.5">
-        <span className="absolute left-0  text-[10px] text-white/30">{fmtScaleLabel(v0, kpi.unit)}</span>
-        <span className="absolute text-[10px] text-green-400/70 font-medium -translate-x-1/2" style={{ left: '20%' }}>{fmtScaleLabel(thresh.green, kpi.unit)}</span>
-        <span className="absolute text-[10px] text-red-400/70   font-medium -translate-x-1/2" style={{ left: '80%' }}>{fmtScaleLabel(thresh.red, kpi.unit)}</span>
-        <span className="absolute right-0 text-[10px] text-white/30 translate-x-0">{fmtScaleLabel(v100, kpi.unit)}</span>
+      {/* Etiketter: endast cutoffs (20% och 80%), 50% större font */}
+      <div className="relative h-5 mt-1">
+        <span className="absolute text-[15px] text-green-400 font-bold -translate-x-1/2" style={{ left: '20%' }}>{fmtScaleLabel(thresh.green, kpi.unit)}</span>
+        <span className="absolute text-[15px] text-red-400   font-bold -translate-x-1/2" style={{ left: '80%' }}>{fmtScaleLabel(thresh.red, kpi.unit)}</span>
       </div>
     </div>
   )
