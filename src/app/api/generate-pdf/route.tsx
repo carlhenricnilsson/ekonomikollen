@@ -5,36 +5,84 @@ import { renderToBuffer, Document, Page, Text, View, StyleSheet } from '@react-p
 
 const TC = { green: '#22c55e', yellow: '#eab308', red: '#ef4444', neutral: '#60a5fa' }
 
+// Tröskelvärden – matchar /results/[surveyId]/page.tsx
+type Thresh = { green: number; red: number }
+const KPI_THRESH: Record<number, Thresh> = {
+  1: { green: 800,  red: 1000  },
+  2: { green: 5000, red: 15000 },
+  3: { green: 5,    red: 10    },
+  4: { green: 250,  red: 130   }, // högre = bättre → green > red
+  5: { green: 175,  red: 250   },
+  6: { green: 700,  red: 1000  },
+  7: { green: 5000, red: 15000 },
+}
+
+function rawP(value: number, t: Thresh): number {
+  return 20 + (value - t.green) / (t.red - t.green) * 60
+}
+function clampP(p: number): number {
+  if (p < 0)   return 3
+  if (p < 10)  return 7
+  if (p > 100) return 97
+  if (p > 90)  return 93
+  return p
+}
+function edgeVal(pos: 0 | 100, t: Thresh): number {
+  return t.green + (pos - 20) * (t.red - t.green) / 60
+}
+function fmtScaleLabel(v: number, unit: string): string {
+  if (unit === '%') return `${Math.round(v)}%`
+  const r = Math.round(v)
+  if (Math.abs(r) >= 10000) return `${Math.round(r / 1000)}k`
+  if (Math.abs(r) >= 1000)  return r.toLocaleString('sv-SE')
+  return `${r}`
+}
+
 const s = StyleSheet.create({
   page:         { backgroundColor: '#0f172a', padding: '28 32 44 32', fontFamily: 'Helvetica', color: '#ffffff' },
   // Header
-  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: '1 solid #1e293b' },
+  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1 solid #1e293b' },
   logo:         { fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#ffffff' },
   logoBlue:     { color: '#60a5fa' },
   headerRight:  { fontSize: 9, color: '#64748b' },
   // Title block
-  titleBlock:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  brfLabel:     { fontSize: 9, color: '#60a5fa', fontFamily: 'Helvetica-Bold', marginBottom: 3 },
-  brfTitle:     { fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginBottom: 2 },
-  brfSub:       { fontSize: 9, color: '#94a3b8' },
+  titleBlock:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  brfLabel:     { fontSize: 9, color: '#60a5fa', fontFamily: 'Helvetica-Bold', marginBottom: 2 },
+  brfTitle:     { fontSize: 20, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginBottom: 2 },
+  brfSub:       { fontSize: 8, color: '#94a3b8' },
   badge:        { backgroundColor: '#1e3a5f', padding: '4 10', borderRadius: 6 },
   badgeText:    { fontSize: 8, color: '#93c5fd' },
   // Summary boxes
-  summaryRow:   { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  sumBox:       { flex: 1, borderRadius: 6, padding: '8 0', alignItems: 'center' },
-  sumNum:       { fontSize: 22, fontFamily: 'Helvetica-Bold', marginBottom: 2 },
+  summaryRow:   { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  sumBox:       { flex: 1, borderRadius: 6, padding: '6 0', alignItems: 'center' },
+  sumNum:       { fontSize: 18, fontFamily: 'Helvetica-Bold', marginBottom: 1 },
   sumLabel:     { fontSize: 8 },
   // Section title
-  secTitle:     { fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginBottom: 8, paddingBottom: 5, borderBottom: '1 solid #1e293b' },
-  // KPI rows
-  kpiRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 6, padding: '12 14', marginBottom: 7 },
-  kpiBadge:     { width: 28, height: 28, borderRadius: 5, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  kpiBadgeTxt:  { fontSize: 12, fontFamily: 'Helvetica-Bold' },
+  secTitle:     { fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginBottom: 6, paddingBottom: 4, borderBottom: '1 solid #1e293b' },
+  // KPI rows (taller now, with scale)
+  kpiRow:       { backgroundColor: '#1e293b', borderRadius: 6, padding: '8 12', marginBottom: 5 },
+  kpiTop:       { flexDirection: 'row', alignItems: 'center' },
+  kpiBadge:     { width: 24, height: 24, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  kpiBadgeTxt:  { fontSize: 11, fontFamily: 'Helvetica-Bold' },
   kpiName:      { fontSize: 10, color: '#e2e8f0', flex: 1 },
-  kpiVal:       { fontSize: 14, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginRight: 8, textAlign: 'right', minWidth: 80 },
-  kpiStatus:    { fontSize: 8, minWidth: 48, textAlign: 'center', padding: '3 6', borderRadius: 4 },
+  kpiVal:       { fontSize: 12, fontFamily: 'Helvetica-Bold', marginRight: 6 },
+  kpiStatus:    { fontSize: 7, padding: '2 5', borderRadius: 4, fontFamily: 'Helvetica-Bold' },
+  // Scale
+  scaleWrap:    { marginTop: 6, position: 'relative' },
+  scaleBar:     { flexDirection: 'row', height: 5, borderRadius: 2, overflow: 'hidden' },
+  zGreenSoft:   { backgroundColor: 'rgba(74,222,128,0.25)' },
+  zGreen:       { backgroundColor: 'rgba(74,222,128,0.55)' },
+  zYellow:      { backgroundColor: 'rgba(234,179,8,0.45)' },
+  zRed:         { backgroundColor: 'rgba(248,113,113,0.55)' },
+  zRedSoft:     { backgroundColor: 'rgba(248,113,113,0.25)' },
+  marker:       { position: 'absolute', top: -2, width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: '#0f172a' },
+  scaleLabels:  { position: 'relative', height: 10, marginTop: 2 },
+  lblL:         { position: 'absolute', left: 0, fontSize: 7, color: '#64748b' },
+  lblG:         { position: 'absolute', left: '20%', fontSize: 7, color: '#4ade80', fontFamily: 'Helvetica-Bold', transform: 'translateX(-50%)' },
+  lblR:         { position: 'absolute', left: '80%', fontSize: 7, color: '#f87171', fontFamily: 'Helvetica-Bold', transform: 'translateX(-50%)' },
+  lblE:         { position: 'absolute', right: 0, fontSize: 7, color: '#64748b' },
   // Footer
-  footer:       { position: 'absolute', bottom: 18, left: 32, right: 32, flexDirection: 'row', justifyContent: 'space-between', borderTop: '1 solid #1e293b', paddingTop: 8 },
+  footer:       { position: 'absolute', bottom: 18, left: 32, right: 32, flexDirection: 'row', justifyContent: 'space-between', borderTop: '1 solid #1e293b', paddingTop: 6 },
   footerTxt:    { fontSize: 7, color: '#475569' },
   // AI page
   aiPage:       { backgroundColor: '#0f172a', padding: '28 32 44 32', fontFamily: 'Helvetica', color: '#ffffff' },
@@ -62,19 +110,14 @@ function getLabel(light: string) {
 
 function renderAIText(text: string) {
   return text.split('\n').map((line, i) => {
-    // Filtrera bort --- och tabellseparatorer |---|---|
     if (/^[-*]{3,}$/.test(line.trim()))       return null
     if (/^\|[\s|:-]+\|$/.test(line.trim()))   return null
-    // Tomrad
     if (line.trim() === '') return <Text key={i} style={{ fontSize: 2 }}> </Text>
-    // ### och ## rubriker
     if (line.startsWith('### ')) return <Text key={i} style={[s.aiH2, { fontSize: 11 }]}>{line.replace(/^###\s+/, '')}</Text>
     if (line.startsWith('## '))  return <Text key={i} style={s.aiH2}>{line.replace(/^##\s+/, '')}</Text>
     if (line.startsWith('# '))   return <Text key={i} style={[s.aiH2, { fontSize: 14 }]}>{line.replace(/^#\s+/, '')}</Text>
-    // Punktlista
     if (line.startsWith('- ') || line.startsWith('* '))
       return <Text key={i} style={[s.aiBody, { marginLeft: 10 }]}>{'• ' + line.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</Text>
-    // Tabellrader (innehåller | men är inte separator)
     if (line.includes('|')) return null
     return <Text key={i} style={s.aiBody}>{line.replace(/\*\*/g, '')}</Text>
   })
@@ -145,22 +188,51 @@ export async function GET(req: NextRequest) {
 
       {/* KPI-rader */}
       {kpis.map(kpi => {
-        const color = TC[kpi.traffic_light as keyof typeof TC] || TC.neutral
+        const color   = TC[kpi.traffic_light as keyof typeof TC] || TC.neutral
+        const thresh  = KPI_THRESH[kpi.kpi_number]
+        const mp      = thresh ? clampP(rawP(Number(kpi.value), thresh)) : 50
+        const v0      = thresh ? edgeVal(0,   thresh) : 0
+        const v100    = thresh ? edgeVal(100, thresh) : 0
+        const dotColor = kpi.traffic_light === 'green' ? '#4ade80'
+                       : kpi.traffic_light === 'yellow' ? '#facc15'
+                       : kpi.traffic_light === 'red'    ? '#f87171'
+                       : '#60a5fa'
+
         return (
-          <View key={kpi.kpi_number} style={s.kpiRow}>
-            {/* Nummer-badge */}
-            <View style={[s.kpiBadge, { backgroundColor: color + '33', borderWidth: 1, borderColor: color + '55' }]}>
-              <Text style={[s.kpiBadgeTxt, { color }]}>{kpi.kpi_number}</Text>
-            </View>
-            {/* Namn */}
-            <Text style={s.kpiName}>{kpi.kpi_name}</Text>
-            {/* Värde + status */}
-            <View style={{ alignItems: 'flex-end' }}>
+          <View key={kpi.kpi_number} style={s.kpiRow} wrap={false}>
+            {/* Top row: badge + name + value + status */}
+            <View style={s.kpiTop}>
+              <View style={[s.kpiBadge, { backgroundColor: color + '33', borderWidth: 1, borderColor: color + '55' }]}>
+                <Text style={[s.kpiBadgeTxt, { color }]}>{kpi.kpi_number}</Text>
+              </View>
+              <Text style={s.kpiName}>{kpi.kpi_name}</Text>
               <Text style={[s.kpiVal, { color }]}>{fmtVal(Number(kpi.value), kpi.unit)}</Text>
-              <View style={[s.kpiStatus, { backgroundColor: color + '22' }]}>
-                <Text style={{ fontSize: 8, color, fontFamily: 'Helvetica-Bold' }}>{getLabel(kpi.traffic_light)}</Text>
+              <View style={{ backgroundColor: color + '22', borderRadius: 4, padding: '2 5' }}>
+                <Text style={[s.kpiStatus, { color }]}>{getLabel(kpi.traffic_light)}</Text>
               </View>
             </View>
+
+            {/* Scale */}
+            {thresh && (
+              <View style={s.scaleWrap}>
+                <View style={s.scaleBar}>
+                  <View style={[s.zGreenSoft, { width: '10%' }]} />
+                  <View style={[s.zGreen,     { width: '10%' }]} />
+                  <View style={[s.zYellow,    { width: '60%' }]} />
+                  <View style={[s.zRed,       { width: '10%' }]} />
+                  <View style={[s.zRedSoft,   { width: '10%' }]} />
+                </View>
+                {/* Marker dot */}
+                <View style={[s.marker, { left: `${mp}%`, marginLeft: -4.5, backgroundColor: dotColor }]} />
+                {/* Labels */}
+                <View style={s.scaleLabels}>
+                  <Text style={s.lblL}>{fmtScaleLabel(v0, kpi.unit)} {kpi.unit !== '%' ? kpi.unit : ''}</Text>
+                  <Text style={s.lblG}>{fmtScaleLabel(thresh.green, kpi.unit)}</Text>
+                  <Text style={s.lblR}>{fmtScaleLabel(thresh.red, kpi.unit)}</Text>
+                  <Text style={s.lblE}>{fmtScaleLabel(v100, kpi.unit)} {kpi.unit !== '%' ? kpi.unit : ''}</Text>
+                </View>
+              </View>
+            )}
           </View>
         )
       })}
