@@ -117,7 +117,6 @@ VIKTIGA FORMATERINGSREGLER:
           const { error: dbError } = await supabaseAdmin.from('ai_analyses').insert({
             survey_id: surveyId,
             analysis_text: fullText,
-            model: 'claude-sonnet-4-6',
           })
           if (dbError) {
             console.error('[ai-analysis] DB insert failed:', dbError)
