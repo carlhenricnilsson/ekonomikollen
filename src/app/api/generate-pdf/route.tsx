@@ -68,14 +68,16 @@ const s = StyleSheet.create({
   kpiVal:       { fontSize: 12, fontFamily: 'Helvetica-Bold', marginRight: 6 },
   kpiStatus:    { fontSize: 7, padding: '2 5', borderRadius: 4, fontFamily: 'Helvetica-Bold' },
   // Scale
-  scaleWrap:    { marginTop: 6, position: 'relative' },
-  scaleBar:     { flexDirection: 'row', height: 5, borderRadius: 2, overflow: 'hidden' },
-  zGreenSoft:   { backgroundColor: 'rgba(74,222,128,0.25)' },
-  zGreen:       { backgroundColor: 'rgba(74,222,128,0.55)' },
-  zYellow:      { backgroundColor: 'rgba(234,179,8,0.45)' },
-  zRed:         { backgroundColor: 'rgba(248,113,113,0.55)' },
-  zRedSoft:     { backgroundColor: 'rgba(248,113,113,0.25)' },
-  marker:       { position: 'absolute', top: -2, width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: '#0f172a' },
+  scaleWrap:    { marginTop: 7, position: 'relative' },
+  scaleBar:     { flexDirection: 'row', height: 6, borderRadius: 2 },
+  zGreen:       { backgroundColor: 'rgba(74,222,128,0.85)' },
+  zYellow:      { backgroundColor: 'rgba(234,179,8,0.65)' },
+  zRed:         { backgroundColor: 'rgba(248,113,113,0.85)' },
+  dashCellOn:   { flex: 1, backgroundColor: 'rgba(74,222,128,0.95)' },
+  dashCellOff:  { flex: 1 },
+  dashCellOnR:  { flex: 1, backgroundColor: 'rgba(248,113,113,0.95)' },
+  dashZoneRow:  { flexDirection: 'row', height: '100%' },
+  marker:       { position: 'absolute', top: -4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#0f172a' },
   scaleLabels:  { position: 'relative', height: 10, marginTop: 2 },
   lblL:         { position: 'absolute', left: 0, fontSize: 7, color: '#64748b' },
   lblG:         { position: 'absolute', left: '20%', fontSize: 7, color: '#4ade80', fontFamily: 'Helvetica-Bold', transform: 'translateX(-50%)' },
@@ -216,14 +218,31 @@ export async function GET(req: NextRequest) {
             {thresh && (
               <View style={s.scaleWrap}>
                 <View style={s.scaleBar}>
-                  <View style={[s.zGreenSoft, { width: '10%' }]} />
-                  <View style={[s.zGreen,     { width: '10%' }]} />
-                  <View style={[s.zYellow,    { width: '60%' }]} />
-                  <View style={[s.zRed,       { width: '10%' }]} />
-                  <View style={[s.zRedSoft,   { width: '10%' }]} />
+                  {/* 0-10%: dashed green (full color) */}
+                  <View style={{ width: '10%' }}>
+                    <View style={s.dashZoneRow}>
+                      {[0,1,2,3,4,5,6,7].map(i => (
+                        <View key={i} style={i % 2 === 0 ? s.dashCellOn : s.dashCellOff} />
+                      ))}
+                    </View>
+                  </View>
+                  {/* 10-20%: solid green */}
+                  <View style={[s.zGreen,  { width: '10%' }]} />
+                  {/* 20-80%: solid yellow */}
+                  <View style={[s.zYellow, { width: '60%' }]} />
+                  {/* 80-90%: solid red */}
+                  <View style={[s.zRed,    { width: '10%' }]} />
+                  {/* 90-100%: dashed red (full color) */}
+                  <View style={{ width: '10%' }}>
+                    <View style={s.dashZoneRow}>
+                      {[0,1,2,3,4,5,6,7].map(i => (
+                        <View key={i} style={i % 2 === 0 ? s.dashCellOnR : s.dashCellOff} />
+                      ))}
+                    </View>
+                  </View>
                 </View>
                 {/* Marker dot */}
-                <View style={[s.marker, { left: `${mp}%`, marginLeft: -4.5, backgroundColor: dotColor }]} />
+                <View style={[s.marker, { left: `${mp}%`, marginLeft: -7, backgroundColor: dotColor }]} />
                 {/* Labels */}
                 <View style={s.scaleLabels}>
                   <Text style={s.lblL}>{fmtScaleLabel(v0, kpi.unit)} {kpi.unit !== '%' ? kpi.unit : ''}</Text>
