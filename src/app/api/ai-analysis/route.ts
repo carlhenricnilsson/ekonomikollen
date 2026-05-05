@@ -2,10 +2,10 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
-// Streaming håller connection vid liv. Vercel default-timeout (10s) räcker
-// inte för Opus med 8000 tokens — vi sätter 60s som säkerhetsmarginal,
-// men streamen levererar redan tokens långt innan dess.
-export const maxDuration = 60
+// Streaming håller connection vid liv. Opus levererar ~140 char/s,
+// så en 8000-token-analys (~30 000 chars) tar ~3-4 minuter.
+// 300s = Vercel Pro-plan max.
+export const maxDuration = 300
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
