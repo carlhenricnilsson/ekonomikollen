@@ -27,9 +27,6 @@ function clampP(p: number): number {
   if (p > 90)  return 93
   return p
 }
-function edgeVal(pos: 0 | 100, t: Thresh): number {
-  return t.green + (pos - 20) * (t.red - t.green) / 60
-}
 function fmtScaleLabel(v: number, unit: string): string {
   if (unit === '%') return `${Math.round(v)}%`
   const r = Math.round(v)
@@ -68,19 +65,13 @@ const s = StyleSheet.create({
   kpiVal:       { fontSize: 12, fontFamily: 'Helvetica-Bold', marginRight: 6 },
   kpiStatus:    { fontSize: 7, padding: '2 5', borderRadius: 4, fontFamily: 'Helvetica-Bold' },
   // Scale
-  scaleWrap:    { marginTop: 7, position: 'relative' },
-  scaleBar:     { flexDirection: 'row', height: 6, borderRadius: 2 },
+  scaleWrap:    { marginTop: 8, position: 'relative' },
+  scaleBar:     { flexDirection: 'row', height: 4, borderRadius: 2 },
   zGreen:       { backgroundColor: 'rgba(74,222,128,0.85)' },
   zYellow:      { backgroundColor: 'rgba(234,179,8,0.65)' },
   zRed:         { backgroundColor: 'rgba(248,113,113,0.85)' },
-  dashCellOn:   { flex: 1, backgroundColor: 'rgba(74,222,128,0.95)' },
-  dashCellOff:  { flex: 1 },
-  dashCellOnR:  { flex: 1, backgroundColor: 'rgba(248,113,113,0.95)' },
-  dashZoneRow:  { flexDirection: 'row', height: '100%' },
-  marker:       { position: 'absolute', top: -4, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#0f172a' },
+  marker:       { position: 'absolute', top: -5, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#0f172a' },
   scaleLabels:  { position: 'relative', height: 10, marginTop: 2 },
-  lblL:         { position: 'absolute', left: 0, fontSize: 7, color: '#64748b' },
-  lblE:         { position: 'absolute', right: 0, fontSize: 7, color: '#64748b' },
   lblWrapG:     { position: 'absolute', left: '20%', marginLeft: -25, width: 50, alignItems: 'center' },
   lblWrapR:     { position: 'absolute', left: '80%', marginLeft: -25, width: 50, alignItems: 'center' },
   lblTxtG:      { fontSize: 7, color: '#4ade80', fontFamily: 'Helvetica-Bold' },
@@ -195,8 +186,6 @@ export async function GET(req: NextRequest) {
         const color   = TC[kpi.traffic_light as keyof typeof TC] || TC.neutral
         const thresh  = KPI_THRESH[kpi.kpi_number]
         const mp      = thresh ? clampP(rawP(Number(kpi.value), thresh)) : 50
-        const v0      = thresh ? edgeVal(0,   thresh) : 0
-        const v100    = thresh ? edgeVal(100, thresh) : 0
         const dotColor = kpi.traffic_light === 'green' ? '#4ade80'
                        : kpi.traffic_light === 'yellow' ? '#facc15'
                        : kpi.traffic_light === 'red'    ? '#f87171'
@@ -220,8 +209,10 @@ export async function GET(req: NextRequest) {
             {thresh && (
               <View style={s.scaleWrap}>
                 <View style={s.scaleBar}>
-                  {/* 0-10%: dashed green (full color) */}
-                  <View style={{ width: '10%', height: 6, flexDirection: 'row' }}>
+                  {/* 0-10%: dashed green (full color) - 4 dashes */}
+                  <View style={{ width: '10%', height: 4, flexDirection: 'row' }}>
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1 }} />
                     <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
                     <View style={{ flex: 1 }} />
                     <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
@@ -234,8 +225,10 @@ export async function GET(req: NextRequest) {
                   <View style={[s.zYellow, { width: '60%' }]} />
                   {/* 80-90%: solid red */}
                   <View style={[s.zRed,    { width: '10%' }]} />
-                  {/* 90-100%: dashed red (full color) */}
-                  <View style={{ width: '10%', height: 6, flexDirection: 'row' }}>
+                  {/* 90-100%: dashed red (full color) - 4 dashes */}
+                  <View style={{ width: '10%', height: 4, flexDirection: 'row' }}>
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1 }} />
                     <View style={{ flex: 1, backgroundColor: '#f87171' }} />
                     <View style={{ flex: 1 }} />
                     <View style={{ flex: 1, backgroundColor: '#f87171' }} />
@@ -247,14 +240,12 @@ export async function GET(req: NextRequest) {
                 <View style={[s.marker, { left: `${mp}%`, marginLeft: -7, backgroundColor: dotColor }]} />
                 {/* Labels */}
                 <View style={s.scaleLabels}>
-                  <Text style={s.lblL}>{fmtScaleLabel(v0, kpi.unit)} {kpi.unit !== '%' ? kpi.unit : ''}</Text>
                   <View style={s.lblWrapG}>
                     <Text style={s.lblTxtG}>{fmtScaleLabel(thresh.green, kpi.unit)}</Text>
                   </View>
                   <View style={s.lblWrapR}>
                     <Text style={s.lblTxtR}>{fmtScaleLabel(thresh.red, kpi.unit)}</Text>
                   </View>
-                  <Text style={s.lblE}>{fmtScaleLabel(v100, kpi.unit)} {kpi.unit !== '%' ? kpi.unit : ''}</Text>
                 </View>
               </View>
             )}
