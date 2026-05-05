@@ -99,7 +99,7 @@ VIKTIGA FORMATERINGSREGLER:
     async start(controller) {
       try {
         const anthropicStream = client.messages.stream({
-          model: 'claude-opus-4-6',
+          model: 'claude-sonnet-4-6',
           max_tokens: 8000,
           messages: [{ role: 'user', content: prompt }],
         })
@@ -114,11 +114,16 @@ VIKTIGA FORMATERINGSREGLER:
 
         // Spara till databasen om surveyId finns
         if (surveyId && fullText) {
-          await supabaseAdmin.from('ai_analyses').insert({
+          const { error: dbError } = await supabaseAdmin.from('ai_analyses').insert({
             survey_id: surveyId,
             analysis_text: fullText,
-            model: 'claude-opus-4-6',
+            model: 'claude-sonnet-4-6',
           })
+          if (dbError) {
+            console.error('[ai-analysis] DB insert failed:', dbError)
+          } else {
+            console.log(`[ai-analysis] Saved ${fullText.length} chars for survey ${surveyId}`)
+          }
         }
 
         controller.close()
