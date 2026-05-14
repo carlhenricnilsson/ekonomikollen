@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+// Lazy-init: skapas vid första request, inte vid build/import
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!)
+}
 
 const REPORT_PRICE = 5995
 
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest) {
     : 'BRF Ekonomikollen – Analysrapport'
 
   // Skapa Stripe Checkout-session
+  const stripe = getStripe()
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],
