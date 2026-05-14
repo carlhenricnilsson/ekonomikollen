@@ -215,6 +215,7 @@ export default function ResultsPage() {
   const [voucherError, setVoucherError] = useState('')
   const [voucherLoading, setVoucherLoading] = useState(false)
   const [showPaywall, setShowPaywall] = useState(false)
+  const [paymentLoading, setPaymentLoading] = useState(false)
 
   useEffect(() => {
     fetch('/api/benchmarks')
@@ -386,6 +387,24 @@ export default function ResultsPage() {
   // Fullständig tillgång: superadmin, betald, eller anonym (från enkätlänk)
   const hasFullAccess = reportUnlocked || userRole === 'superadmin' || userRole === 'anonymous'
 
+  async function payWithStripe(voucher?: string) {
+    if (!userId) return
+    setPaymentLoading(true)
+    setVoucherError('')
+    const res = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, survey_id: surveyId, voucher_code: voucher }),
+    })
+    const data = await res.json()
+    if (data.url) {
+      window.location.href = data.url
+    } else {
+      setVoucherError(data.error || 'Fel vid betalning. Försök igen.')
+      setPaymentLoading(false)
+    }
+  }
+
   async function redeemVoucher() {
     if (!userId) return
     setVoucherLoading(true)
@@ -402,7 +421,10 @@ export default function ResultsPage() {
     } else if (data.error) {
       setVoucherError(data.error)
     } else if (data.requires_payment) {
-      setVoucherError(data.message || `Pris: ${data.final_price} kr. Stripe-betalning aktiveras snart.`)
+      // Partiell rabatt – skicka vidare till Stripe med samma kod
+      setVoucherLoading(false)
+      await payWithStripe(voucherCode)
+      return
     }
     setVoucherLoading(false)
   }
@@ -591,13 +613,11 @@ export default function ResultsPage() {
 
                   <div className="border-t border-white/10 pt-4">
                     <button
-                      onClick={() => {
-                        // Stripe checkout - förberett
-                        setVoucherError('Stripe-betalning aktiveras snart. Kontakta support för tillgång.')
-                      }}
-                      className="w-full bg-blue-500 hover:bg-blue-400 text-white font-semibold py-3 rounded-xl transition-colors mb-2"
+                      onClick={() => payWithStripe()}
+                      disabled={paymentLoading}
+                      className="w-full bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors mb-2"
                     >
-                      Betala 5 995 kr
+                      {paymentLoading ? 'Skickar till betalning...' : 'Betala 5 995 kr'}
                     </button>
                     <p className="text-white/30 text-xs">Säker betalning via Stripe</p>
                   </div>

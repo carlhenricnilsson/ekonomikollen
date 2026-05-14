@@ -56,3 +56,12 @@ CREATE TABLE IF NOT EXISTS invitations (
 -- Säkerställ att user_profiles har rätt kolumner
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS display_name text;
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS phone text;
+
+-- --------------------------------------------------------
+-- GRANTS – krävs fr.o.m. Supabase policy 2026-10-30
+-- Alla nya tabeller måste ha explicita grants.
+-- --------------------------------------------------------
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.brf_admin_brfs TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.payments TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.vouchers TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.invitations TO authenticated;

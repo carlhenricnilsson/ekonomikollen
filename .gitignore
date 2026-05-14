@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# Lokala dokument och testdata (inte del av repot)
+Egna filer BRF-Ekonomikollen/
+.tmp_*.mjs
