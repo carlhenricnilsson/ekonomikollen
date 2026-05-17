@@ -19,6 +19,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'user_id och survey_id krävs' }, { status: 400 })
   }
 
+  // Blockera betalning av arkiverad enkät
+  const { data: surveyRow } = await supabaseAdmin
+    .from('surveys')
+    .select('deleted_at')
+    .eq('id', survey_id)
+    .single()
+
+  if (!surveyRow || surveyRow.deleted_at) {
+    return NextResponse.json({ error: 'Enkäten är inte tillgänglig' }, { status: 404 })
+  }
+
   // Kolla om redan upplåst
   const { data: existingPayment } = await supabaseAdmin
     .from('payments')

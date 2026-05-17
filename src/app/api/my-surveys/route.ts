@@ -29,10 +29,12 @@ export async function GET(req: NextRequest) {
   const brfNames = (brfLinks ?? []).map((b: { brf_base_name: string }) => b.brf_base_name)
 
   // Hämta alla completed surveys via admin (kringgår RLS)
+  // Arkiverade enkäter (deleted_at satt) ska aldrig visas för brf_admin
   const { data: allSurveys } = await supabaseAdmin
     .from('surveys')
     .select('*, kpi_results(*)')
     .eq('status', 'completed')
+    .is('deleted_at', null)
 
   // Filtrera på BRF-basnamn
   const matching = (allSurveys ?? []).filter((s: { brf_name: string | null }) => {

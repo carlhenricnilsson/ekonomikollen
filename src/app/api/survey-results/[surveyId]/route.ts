@@ -47,9 +47,14 @@ export async function GET(
   // Hämta survey-metadata
   const { data: surveyRow } = await supabaseAdmin
     .from('surveys')
-    .select('brf_name, survey_year, version')
+    .select('brf_name, survey_year, version, deleted_at')
     .eq('id', surveyId)
     .single()
+
+  // Arkiverade enkäter är endast åtkomliga för superadmin
+  if (surveyRow?.deleted_at && userRole !== 'superadmin') {
+    return NextResponse.json({ error: 'Enkäten är inte tillgänglig' }, { status: 404 })
+  }
 
   // Hämta KPI-resultat
   const { data: kpiRows } = await supabaseAdmin
@@ -80,6 +85,7 @@ export async function GET(
       .from('surveys')
       .select('id, survey_year, brf_name, kpi_results(*)')
       .eq('status', 'completed')
+      .is('deleted_at', null)
     historicalKpis = (allSurveys ?? [])
       .filter((s: { id: string; brf_name: string | null }) =>
         s.id !== surveyId && s.brf_name &&

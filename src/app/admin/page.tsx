@@ -12,8 +12,19 @@ type Survey = {
   token: string
   version: number | null
   created_at: string
+  deleted_at: string | null
   kpi_results: { kpi_number: number; value: number; traffic_light: string }[]
 }
+
+type ConfirmState = {
+  action: 'archive' | 'restore' | 'hard_delete'
+  scope: 'survey' | 'brf'
+  surveyId?: string
+  brfBaseName?: string
+  expectedName: string
+  label: string
+  paidCount: number
+} | null
 
 export default function AdminPage() {
   const router = useRouter()
@@ -51,6 +62,13 @@ export default function AdminPage() {
   const [creatingVoucher, setCreatingVoucher] = useState(false)
   const [voucherMsg, setVoucherMsg] = useState('')
   const [userId, setUserId] = useState('')
+  // Arkivering / radering
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null)
+  const [confirmInput, setConfirmInput] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const [actionMsg, setActionMsg] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [paidSurveyIds, setPaidSurveyIds] = useState<string[]>([])
 
   useEffect(() => {
     checkAuth()
@@ -87,6 +105,14 @@ export default function AdminPage() {
     })
 
     setSurveys(sorted)
+
+    // Hämta vilka enkäter som har en genomförd betalning (för varning vid radering)
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('survey_id')
+      .eq('status', 'completed')
+    setPaidSurveyIds([...new Set((payments ?? []).map((p: { survey_id: string }) => p.survey_id))])
+
     setLoading(false)
   }
 
@@ -240,10 +266,80 @@ export default function AdminPage() {
   }
 
   const filteredSurveys = surveys.filter(s => {
+    if (s.deleted_at) return false // arkiverade visas i separat sektion
     const nameMatch = searchQuery === '' || (s.brf_name ?? '').toLowerCase().includes(searchQuery.toLowerCase())
     const yearMatch = searchYear === '' || String(s.survey_year) === searchYear
     return nameMatch && yearMatch
   })
+
+  const archivedSurveys = surveys
+    .filter(s => s.deleted_at)
+    .sort((a, b) => {
+      const nameA = (a.brf_name ?? '').toLowerCase()
+      const nameB = (b.brf_name ?? '').toLowerCase()
+      if (nameA !== nameB) return nameA < nameB ? -1 : 1
+      return b.survey_year - a.survey_year
+    })
+
+  function baseName(brfName: string | null): string {
+    if (!brfName) return ''
+    return brfName.replace(/\s+\d{4}$/, '').trim()
+  }
+
+  // Räknar genomförda betalningar för en uppsättning enkäter
+  function countPaid(surveyIds: string[]): number {
+    return paidSurveyIds.filter(id => surveyIds.includes(id)).length
+  }
+
+  function openConfirm(cs: NonNullable<ConfirmState>) {
+    setConfirmInput('')
+    setActionMsg('')
+    setConfirmState(cs)
+  }
+
+  async function executeAction(force = false) {
+    if (!confirmState) return
+    setProcessing(true)
+    setActionMsg('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/manage-survey', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({
+          action: confirmState.action,
+          scope: confirmState.scope,
+          survey_id: confirmState.surveyId,
+          brf_base_name: confirmState.brfBaseName,
+          confirm_name: confirmInput,
+          force,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.error === 'paid_report') {
+          // Visa förstärkt varning, kräv extra bekräftelse
+          setConfirmState({ ...confirmState, paidCount: data.paid_count })
+          setActionMsg(`⚠️ ${data.message}`)
+          setProcessing(false)
+          return
+        }
+        setActionMsg(`Fel: ${data.error ?? 'okänt fel'}`)
+        setProcessing(false)
+        return
+      }
+      setConfirmState(null)
+      setConfirmInput('')
+      await fetchSurveys()
+      setActionMsg('')
+    } catch (err) {
+      setActionMsg(`Fel: ${err instanceof Error ? err.message : 'okänt'}`)
+    }
+    setProcessing(false)
+  }
 
   const availableYears = [...new Set(surveys.map(s => s.survey_year))].sort((a, b) => b - a)
 
@@ -784,16 +880,49 @@ export default function AdminPage() {
                         </button>
                       )}
                       {!isMultiYear ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); router.push(`/results/${latest.id}`) }}
-                          className="text-xs text-white/40 hover:text-white transition-colors"
-                        >
-                          Visa →
-                        </button>
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); router.push(`/results/${latest.id}`) }}
+                            className="text-xs text-white/40 hover:text-white transition-colors"
+                          >
+                            Visa →
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openConfirm({
+                                action: 'archive', scope: 'survey', surveyId: latest.id,
+                                expectedName: latest.brf_name ?? `Enkät ${latest.survey_year}`,
+                                label: `Arkivera ${latest.brf_name ?? `Enkät ${latest.survey_year}`}`,
+                                paidCount: countPaid([latest.id]),
+                              })
+                            }}
+                            className="text-xs text-orange-400/70 hover:text-orange-300 transition-colors"
+                          >
+                            Arkivera
+                          </button>
+                        </>
                       ) : (
-                        <svg className={`w-4 h-4 text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const ids = group.surveys.filter(s => !s.deleted_at).map(s => s.id)
+                              openConfirm({
+                                action: 'archive', scope: 'brf', brfBaseName: group.name,
+                                expectedName: group.name,
+                                label: `Arkivera hela ${group.name} (${ids.length} enkäter)`,
+                                paidCount: countPaid(ids),
+                              })
+                            }}
+                            className="text-xs text-orange-400/70 hover:text-orange-300 transition-colors"
+                          >
+                            Arkivera BRF
+                          </button>
+                          <svg className={`w-4 h-4 text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </>
                       )}
                     </div>
                   </div>
@@ -835,6 +964,19 @@ export default function AdminPage() {
                               >
                                 Visa →
                               </button>
+                              <button
+                                onClick={() =>
+                                  openConfirm({
+                                    action: 'archive', scope: 'survey', surveyId: survey.id,
+                                    expectedName: survey.brf_name ?? `Enkät ${survey.survey_year}`,
+                                    label: `Arkivera ${survey.brf_name ?? `Enkät ${survey.survey_year}`}`,
+                                    paidCount: countPaid([survey.id]),
+                                  })
+                                }
+                                className="text-xs text-orange-400/70 hover:text-orange-300 transition-colors"
+                              >
+                                Arkivera
+                              </button>
                             </div>
                           </div>
                         )
@@ -846,7 +988,159 @@ export default function AdminPage() {
             })}
           </div>
         )}
+
+        {/* Arkiverade enkäter */}
+        {archivedSurveys.length > 0 && (
+          <div className="mt-10">
+            <button
+              onClick={() => setShowArchived(v => !v)}
+              className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors mb-4"
+            >
+              <svg className={`w-4 h-4 transition-transform ${showArchived ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              Arkiverade enkäter ({archivedSurveys.length})
+            </button>
+            {showArchived && (
+              <div className="space-y-2">
+                {archivedSurveys.map(survey => {
+                  const isPaid = paidSurveyIds.includes(survey.id)
+                  const name = survey.brf_name ?? `Enkät ${survey.survey_year}`
+                  return (
+                    <div key={survey.id} className="bg-white/[0.03] border border-white/10 rounded-xl px-5 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-white/60">{name}</span>
+                        <span className="text-xs text-white/30">
+                          arkiverad {survey.deleted_at ? new Date(survey.deleted_at).toLocaleDateString('sv-SE') : ''}
+                        </span>
+                        {isPaid && (
+                          <span className="text-xs bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded-full">betald rapport</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() =>
+                            openConfirm({
+                              action: 'restore', scope: 'survey', surveyId: survey.id,
+                              expectedName: name, label: `Återställ ${name}`,
+                              paidCount: 0,
+                            })
+                          }
+                          className="text-xs text-green-400/80 hover:text-green-300 transition-colors"
+                        >
+                          Återställ
+                        </button>
+                        <button
+                          onClick={() =>
+                            openConfirm({
+                              action: 'hard_delete', scope: 'survey', surveyId: survey.id,
+                              expectedName: name, label: `Radera ${name} PERMANENT`,
+                              paidCount: countPaid([survey.id]),
+                            })
+                          }
+                          className="text-xs text-red-400/80 hover:text-red-300 transition-colors"
+                        >
+                          Radera permanent
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Bekräftelsemodal */}
+      {confirmState && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0f1729] border border-white/15 rounded-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-1">
+              {confirmState.action === 'archive' && 'Arkivera enkät'}
+              {confirmState.action === 'restore' && 'Återställ enkät'}
+              {confirmState.action === 'hard_delete' && 'Radera permanent'}
+            </h3>
+            <p className="text-white/50 text-sm mb-4">{confirmState.label}</p>
+
+            {confirmState.action === 'archive' && (
+              <p className="text-white/60 text-sm mb-4">
+                Enkäten döljs för BRF:er och i listan men kan återställas från
+                &quot;Arkiverade enkäter&quot;. Ingen data raderas.
+              </p>
+            )}
+            {confirmState.action === 'hard_delete' && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+                <p className="text-red-300 text-sm font-medium">Detta går INTE att ångra.</p>
+                <p className="text-red-300/80 text-xs mt-1">
+                  Enkät, svar, nyckeltal, AI-analys{confirmState.paidCount > 0 ? ' OCH betalningsposter' : ''} raderas permanent.
+                </p>
+              </div>
+            )}
+            {confirmState.paidCount > 0 && confirmState.action !== 'restore' && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+                <p className="text-amber-300 text-sm font-medium">
+                  ⚠️ {confirmState.paidCount} betald{confirmState.paidCount > 1 ? 'a' : ''} rapport{confirmState.paidCount > 1 ? 'er' : ''} berörs
+                </p>
+                <p className="text-amber-300/80 text-xs mt-1">
+                  En kund har betalat för {confirmState.paidCount > 1 ? 'dessa rapporter' : 'denna rapport'}. Bokföringsdata påverkas.
+                </p>
+              </div>
+            )}
+
+            {confirmState.action !== 'restore' && (
+              <div className="mb-4">
+                <label className="text-white/50 text-xs block mb-1.5">
+                  Skriv <span className="text-white font-medium">{confirmState.expectedName}</span> för att bekräfta
+                </label>
+                <input
+                  type="text"
+                  value={confirmInput}
+                  onChange={e => setConfirmInput(e.target.value)}
+                  autoFocus
+                  className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-400"
+                  placeholder={confirmState.expectedName}
+                />
+              </div>
+            )}
+
+            {actionMsg && (
+              <p className={`text-sm mb-4 ${actionMsg.startsWith('Fel') ? 'text-red-400' : 'text-amber-300'}`}>
+                {actionMsg}
+              </p>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setConfirmState(null); setConfirmInput(''); setActionMsg('') }}
+                disabled={processing}
+                className="text-white/50 hover:text-white text-sm px-4 py-2 transition-colors disabled:opacity-50"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={() => executeAction(confirmState.paidCount > 0)}
+                disabled={
+                  processing ||
+                  (confirmState.action !== 'restore' &&
+                    confirmInput.trim().toLowerCase() !== confirmState.expectedName.toLowerCase())
+                }
+                className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 ${
+                  confirmState.action === 'hard_delete'
+                    ? 'bg-red-600 hover:bg-red-500 text-white'
+                    : confirmState.action === 'restore'
+                      ? 'bg-green-600 hover:bg-green-500 text-white'
+                      : 'bg-orange-600 hover:bg-orange-500 text-white'
+                }`}
+              >
+                {processing ? 'Arbetar...' :
+                  confirmState.action === 'archive' ? 'Arkivera' :
+                  confirmState.action === 'restore' ? 'Återställ' : 'Radera permanent'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

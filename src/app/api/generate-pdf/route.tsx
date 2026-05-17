@@ -132,6 +132,9 @@ export async function GET(req: NextRequest) {
 
   if (!survey || !kpis) return NextResponse.json({ error: 'Enkät hittades inte' }, { status: 404 })
 
+  // Arkiverade enkäter genererar inte PDF (återställ den först om PDF behövs)
+  if (survey.deleted_at) return NextResponse.json({ error: 'Enkäten är arkiverad' }, { status: 404 })
+
   const reportName  = buildReportName(survey.brf_name || 'Okänd BRF', survey.survey_year, survey.version || 1)
   const aiAnalysis  = aiData?.[0]?.analysis_text || ''
   const today       = new Date().toLocaleDateString('sv-SE')
