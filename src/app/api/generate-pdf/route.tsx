@@ -72,8 +72,9 @@ const s = StyleSheet.create({
   zRed:         { backgroundColor: 'rgba(248,113,113,0.85)' },
   marker:       { position: 'absolute', top: -5, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#0f172a' },
   scaleLabels:  { position: 'relative', height: 14, marginTop: 3 },
-  lblWrapG:     { position: 'absolute', left: '20%', marginLeft: -30, width: 60, alignItems: 'center' },
-  lblWrapR:     { position: 'absolute', left: '80%', marginLeft: -30, width: 60, alignItems: 'center' },
+  // SPEGELVÄND: grön tröskel till höger (80%), röd tröskel till vänster (20%)
+  lblWrapG:     { position: 'absolute', left: '80%', marginLeft: -30, width: 60, alignItems: 'center' },
+  lblWrapR:     { position: 'absolute', left: '20%', marginLeft: -30, width: 60, alignItems: 'center' },
   lblTxtG:      { fontSize: 11, color: '#4ade80', fontFamily: 'Helvetica-Bold' },
   lblTxtR:      { fontSize: 11, color: '#f87171', fontFamily: 'Helvetica-Bold' },
   // Footer
@@ -211,36 +212,37 @@ export async function GET(req: NextRequest) {
             {/* Scale */}
             {thresh && (
               <View style={s.scaleWrap}>
+                {/* SPEGELVÄND: dåligt (rött) vänster, bra (grönt) höger */}
                 <View style={s.scaleBar}>
-                  {/* 0-10%: dashed green (full color) - 4 dashes */}
+                  {/* 0-10%: dashed red (full color) - 4 dashes */}
                   <View style={{ width: '10%', height: 4, flexDirection: 'row' }}>
-                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
                     <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
                     <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
                     <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
+                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
                   </View>
-                  {/* 10-20%: solid green */}
-                  <View style={[s.zGreen,  { width: '10%' }]} />
+                  {/* 10-20%: solid red */}
+                  <View style={[s.zRed,    { width: '10%' }]} />
                   {/* 20-80%: solid yellow */}
                   <View style={[s.zYellow, { width: '60%' }]} />
-                  {/* 80-90%: solid red */}
-                  <View style={[s.zRed,    { width: '10%' }]} />
-                  {/* 90-100%: dashed red (full color) - 4 dashes */}
+                  {/* 80-90%: solid green */}
+                  <View style={[s.zGreen,  { width: '10%' }]} />
+                  {/* 90-100%: dashed green (full color) - 4 dashes */}
                   <View style={{ width: '10%', height: 4, flexDirection: 'row' }}>
-                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
                     <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
                     <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
                     <View style={{ flex: 1 }} />
-                    <View style={{ flex: 1, backgroundColor: '#f87171' }} />
+                    <View style={{ flex: 1, backgroundColor: '#4ade80' }} />
                   </View>
                 </View>
-                {/* Marker dot */}
-                <View style={[s.marker, { left: `${mp}%`, marginLeft: -7, backgroundColor: dotColor }]} />
+                {/* Marker dot – spegelvänd position (100 − mp) */}
+                <View style={[s.marker, { left: `${100 - mp}%`, marginLeft: -7, backgroundColor: dotColor }]} />
                 {/* Labels */}
                 <View style={s.scaleLabels}>
                   <View style={s.lblWrapG}>

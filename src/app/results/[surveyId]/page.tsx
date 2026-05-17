@@ -25,8 +25,10 @@ const KPI_INFO: Record<number, { desc: string }> = {
   7: { desc: 'Föreningens lån per kvm bostadsrätt – påverkar direkt era månadsavgifter. Nationellt snitt 2024: 7 191 kr/kvm.' },
 }
 
-// Normaliserad skala: grön tröskel ALLTID vid position 20, röd tröskel ALLTID vid position 80.
-// Vänster = bra (grönt), höger = dåligt (rött).
+// Normaliserad skala (rawP): grön tröskel ALLTID vid position 20, röd vid position 80.
+// rawP är OFÖRÄNDRAD: låg position = bra, hög position = dåligt (används även av
+// "bästa KPI"-logiken). Endast den visuella presentationen i KpiScale/PDF speglas
+// så att bra hamnar till HÖGER och dåligt till VÄNSTER.
 // green = värdet vid pos 20 (bättre tröskel), red = värdet vid pos 80 (sämre tröskel).
 // Lägre=bättre: green < red (KPI 1,2,3,5,6,7). Högre=bättre: green > red (KPI 4).
 type Thresh = { green: number; red: number }
@@ -80,32 +82,32 @@ function KpiScale({ kpi, thresh }: { kpi: KPI; thresh: Thresh }) {
 
   return (
     <div className="mt-3 select-none">
-      {/* Stapeln – 30% tunnare (h-2 istället för h-3) */}
+      {/* Stapeln – SPEGELVÄND: dåligt (rött) till vänster, bra (grönt) till höger */}
       <div className="relative h-2 overflow-visible">
-        {/* 0–10 %: streckad grön (full färg) */}
+        {/* 0–10 %: streckad röd (full färg) */}
         <div className="absolute inset-y-0 flex items-center" style={{ left: '0%', width: '10%' }}>
-          <div className="w-full h-full rounded-l-full" style={{ background: DASH_GREEN }} />
+          <div className="w-full h-full rounded-l-full" style={{ background: DASH_RED }} />
         </div>
-        {/* 10–20 %: solid grön */}
-        <div className="absolute inset-y-0 bg-green-500/85" style={{ left: '10%', width: '10%' }} />
+        {/* 10–20 %: solid röd */}
+        <div className="absolute inset-y-0 bg-red-500/85" style={{ left: '10%', width: '10%' }} />
         {/* 20–80 %: solid gul */}
         <div className="absolute inset-y-0 bg-yellow-500/65" style={{ left: '20%', width: '60%' }} />
-        {/* 80–90 %: solid röd */}
-        <div className="absolute inset-y-0 bg-red-500/85" style={{ left: '80%', width: '10%' }} />
-        {/* 90–100 %: streckad röd (full färg) */}
+        {/* 80–90 %: solid grön */}
+        <div className="absolute inset-y-0 bg-green-500/85" style={{ left: '80%', width: '10%' }} />
+        {/* 90–100 %: streckad grön (full färg) */}
         <div className="absolute inset-y-0 flex items-center" style={{ left: '90%', width: '10%' }}>
-          <div className="w-full h-full rounded-r-full" style={{ background: DASH_RED }} />
+          <div className="w-full h-full rounded-r-full" style={{ background: DASH_GREEN }} />
         </div>
-        {/* Markörpunkt – större (w-5 h-5) */}
+        {/* Markörpunkt – spegelvänd position (100 − mp) */}
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full border-2 border-slate-900 shadow-lg z-10"
-          style={{ left: `${mp}%`, backgroundColor: dotColor }}
+          style={{ left: `${100 - mp}%`, backgroundColor: dotColor }}
         />
       </div>
-      {/* Etiketter: endast cutoffs (20% och 80%), 50% större font */}
+      {/* Etiketter: SPEGELVÄND – röd tröskel vänster (20%), grön tröskel höger (80%) */}
       <div className="relative h-5 mt-1">
-        <span className="absolute text-[15px] text-green-400 font-bold -translate-x-1/2" style={{ left: '20%' }}>{fmtScaleLabel(thresh.green, kpi.unit)}</span>
-        <span className="absolute text-[15px] text-red-400   font-bold -translate-x-1/2" style={{ left: '80%' }}>{fmtScaleLabel(thresh.red, kpi.unit)}</span>
+        <span className="absolute text-[15px] text-red-400   font-bold -translate-x-1/2" style={{ left: '20%' }}>{fmtScaleLabel(thresh.red, kpi.unit)}</span>
+        <span className="absolute text-[15px] text-green-400 font-bold -translate-x-1/2" style={{ left: '80%' }}>{fmtScaleLabel(thresh.green, kpi.unit)}</span>
       </div>
     </div>
   )
