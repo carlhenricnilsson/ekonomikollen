@@ -76,23 +76,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ unlocked: true, final_price: 0 })
     }
 
-    // Reducerat pris – skapa Stripe-session (förberett)
-    // TODO: Stripe Checkout session med reducerat pris
+    // Reducerat pris (partiell rabatt) – kräver betalning.
+    // Frontend (redeemVoucher) skickar voucher-koden vidare till
+    // /api/create-checkout-session som skapar Stripe-sessionen.
     return NextResponse.json({
       unlocked: false,
       final_price: finalPrice,
       requires_payment: true,
-      message: 'Stripe-integration ej konfigurerad ännu. Kontakta support.',
     })
   }
 
-  // Fullt pris – skapa Stripe-session
-  // TODO: Stripe Checkout session med fullt pris
+  // Ingen voucher – fullt pris, kräver betalning.
+  // Frontend redirectar till Stripe via /api/create-checkout-session.
   return NextResponse.json({
     unlocked: false,
     final_price: REPORT_PRICE,
     requires_payment: true,
-    message: 'Stripe-integration ej konfigurerad ännu. Kontakta support.',
   })
 }
 
