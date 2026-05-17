@@ -85,6 +85,12 @@ export async function POST(req: NextRequest) {
     surveyId = survey.id
   }
 
+  // Idempotent: rensa ev. tidigare svar/KPI för enkäten innan nya sparas.
+  // Förhindrar dubbletter om samma tokenlänk lämnas in mer än en gång.
+  // För en nyskapad enkät matchar detta 0 rader (no-op).
+  await supabaseAdmin.from('answers').delete().eq('survey_id', surveyId)
+  await supabaseAdmin.from('kpi_results').delete().eq('survey_id', surveyId)
+
   // Spara alla svar
   const answerRows = Object.entries(answers).map(([question_code, value]) => ({
     survey_id: surveyId,
