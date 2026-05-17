@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase-client'
+import { Thresh, KPI_THRESH, rawP, clampP, fmtScaleLabel } from '@/lib/kpi-scale'
 
 type TrafficLight = 'red' | 'yellow' | 'green' | 'neutral'
 type KPI = { id: number; name: string; value: number; unit: string; light: TrafficLight }
@@ -25,49 +26,8 @@ const KPI_INFO: Record<number, { desc: string }> = {
   7: { desc: 'Föreningens lån per kvm bostadsrätt – påverkar direkt era månadsavgifter. Nationellt snitt 2024: 7 191 kr/kvm.' },
 }
 
-// Normaliserad skala (rawP): grön tröskel ALLTID vid position 20, röd vid position 80.
-// rawP är OFÖRÄNDRAD: låg position = bra, hög position = dåligt (används även av
-// "bästa KPI"-logiken). Endast den visuella presentationen i KpiScale/PDF speglas
-// så att bra hamnar till HÖGER och dåligt till VÄNSTER.
-// green = värdet vid pos 20 (bättre tröskel), red = värdet vid pos 80 (sämre tröskel).
-// Lägre=bättre: green < red (KPI 1,2,3,5,6,7). Högre=bättre: green > red (KPI 4).
-type Thresh = { green: number; red: number }
-const KPI_THRESH: Record<number, Thresh> = {
-  1: { green: 800,  red: 1000  },
-  2: { green: 5000, red: 15000 },
-  3: { green: 5,    red: 10    },
-  4: { green: 250,  red: 130   }, // högre = bättre → green > red
-  5: { green: 175,  red: 250   },
-  6: { green: 700,  red: 1000  },
-  7: { green: 5000, red: 15000 },
-}
-
-// Råposition (kan vara utanför 0-100)
-function rawP(value: number, t: Thresh): number {
-  return 20 + (value - t.green) / (t.red - t.green) * 60
-}
-
-// Markörsposition: klampas enligt spec
-//   p < 0    → 3  (långt utanför god sida)
-//   0 ≤ p < 10 → 7  (i streckad zon, nära)
-//   10 ≤ p ≤ 90 → p  (på den linjära skalan)
-//   90 < p ≤ 100 → 93 (i streckad zon, nära)
-//   p > 100  → 97 (långt utanför dålig sida)
-function clampP(p: number): number {
-  if (p < 0)   return 3
-  if (p < 10)  return 7
-  if (p > 100) return 97
-  if (p > 90)  return 93
-  return p
-}
-
-function fmtScaleLabel(v: number, unit: string): string {
-  if (unit === '%') return `${Math.round(v)}%`
-  const r = Math.round(v)
-  if (Math.abs(r) >= 10000) return `${Math.round(r / 1000)}k`
-  if (Math.abs(r) >= 1000)  return r.toLocaleString('sv-SE')
-  return `${r}`
-}
+// KPI-skalans positionslogik (Thresh, KPI_THRESH, rawP, clampP,
+// fmtScaleLabel) ligger i @/lib/kpi-scale – delad med PDF-rapporten.
 
 // Streckad bakgrund via CSS gradient – full opacitet, 4 streck per zon (matchar PDF)
 const DASH_GREEN = 'repeating-linear-gradient(90deg, #4ade80 0,#4ade80 6%,transparent 6%,transparent 12.5%)'

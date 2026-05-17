@@ -1,39 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { buildReportName } from '@/lib/report-name'
+import { rawP, clampP, fmtScaleLabel, KPI_THRESH } from '@/lib/kpi-scale'
 import { renderToBuffer, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 
 const TC = { green: '#22c55e', yellow: '#eab308', red: '#ef4444', neutral: '#60a5fa' }
 
-// Tröskelvärden – matchar /results/[surveyId]/page.tsx
-type Thresh = { green: number; red: number }
-const KPI_THRESH: Record<number, Thresh> = {
-  1: { green: 800,  red: 1000  },
-  2: { green: 5000, red: 15000 },
-  3: { green: 5,    red: 10    },
-  4: { green: 250,  red: 130   }, // högre = bättre → green > red
-  5: { green: 175,  red: 250   },
-  6: { green: 700,  red: 1000  },
-  7: { green: 5000, red: 15000 },
-}
-
-function rawP(value: number, t: Thresh): number {
-  return 20 + (value - t.green) / (t.red - t.green) * 60
-}
-function clampP(p: number): number {
-  if (p < 0)   return 3
-  if (p < 10)  return 7
-  if (p > 100) return 97
-  if (p > 90)  return 93
-  return p
-}
-function fmtScaleLabel(v: number, unit: string): string {
-  if (unit === '%') return `${Math.round(v)}%`
-  const r = Math.round(v)
-  if (Math.abs(r) >= 10000) return `${Math.round(r / 1000)}k`
-  if (Math.abs(r) >= 1000)  return r.toLocaleString('sv-SE')
-  return `${r}`
-}
+// Tröskelvärden och positionslogik delas med resultatsidan via @/lib/kpi-scale.
 
 const s = StyleSheet.create({
   page:         { backgroundColor: '#0f172a', padding: '28 32 44 32', fontFamily: 'Helvetica', color: '#ffffff' },
