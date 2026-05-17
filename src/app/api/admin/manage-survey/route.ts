@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
+import { requireSuperadmin } from '@/lib/auth'
 
 type Action = 'archive' | 'restore' | 'hard_delete'
 type Scope = 'survey' | 'brf'
@@ -13,30 +13,8 @@ function baseName(brfName: string | null): string {
 
 export async function POST(req: NextRequest) {
   // --- 1. Server-side superadmin-verifiering (lita ALDRIG på klienten) ---
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'Ej inloggad' }, { status: 401 })
-  }
-
-  const supabaseUser = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-    { global: { headers: { Authorization: authHeader } } }
-  )
-  const { data: { user } } = await supabaseUser.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Ogiltig session' }, { status: 401 })
-  }
-
-  const { data: profile } = await supabaseAdmin
-    .from('user_profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'superadmin') {
-    return NextResponse.json({ error: 'Endast superadmin' }, { status: 403 })
-  }
+  const auth = await requireSuperadmin(req)
+  if ('error' in auth) return auth.error
 
   // --- 2. Parsa body ---
   const body = await req.json()

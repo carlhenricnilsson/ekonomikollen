@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
+import { resolveUser } from '@/lib/auth'
 
 export async function GET(
   req: NextRequest,
@@ -8,28 +8,8 @@ export async function GET(
 ) {
   const { surveyId } = await params
 
-  // Hämta inloggad användare via Authorization-header
-  let userId: string | null = null
-  let userRole: 'superadmin' | 'brf_admin' | 'anonymous' = 'anonymous'
-
-  const authHeader = req.headers.get('Authorization')
-  if (authHeader) {
-    const supabaseUser = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-      { global: { headers: { Authorization: authHeader } } }
-    )
-    const { data: { user } } = await supabaseUser.auth.getUser()
-    if (user) {
-      userId = user.id
-      const { data: profile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-      userRole = (profile?.role ?? 'brf_admin') as 'superadmin' | 'brf_admin'
-    }
-  }
+  // Hämta inloggad användare via Authorization-header (delad helper)
+  const { userId, role: userRole } = await resolveUser(req)
 
   // Kolla betalning / full access
   let reportUnlocked = userRole === 'superadmin'

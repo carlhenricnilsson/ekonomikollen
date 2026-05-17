@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
+import { resolveUser } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  // Hämta den inloggade användaren via Authorization-headern
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) {
-    return NextResponse.json({ surveys: [], payments: [] })
-  }
-
-  // Skapa en klient med användarens token för att få rätt user_id
-  const supabaseUser = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-    { global: { headers: { Authorization: authHeader } } }
-  )
-  const { data: { user } } = await supabaseUser.auth.getUser()
-  if (!user) {
+  // Hämta den inloggade användaren via Authorization-headern (delad helper)
+  const { userId } = await resolveUser(req)
+  if (!userId) {
     return NextResponse.json({ surveys: [], payments: [] })
   }
 
@@ -24,7 +13,7 @@ export async function GET(req: NextRequest) {
   const { data: brfLinks } = await supabaseAdmin
     .from('brf_admin_brfs')
     .select('brf_base_name')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
 
   const brfNames = (brfLinks ?? []).map((b: { brf_base_name: string }) => b.brf_base_name)
 
@@ -55,7 +44,7 @@ export async function GET(req: NextRequest) {
   const { data: payments } = await supabaseAdmin
     .from('payments')
     .select('survey_id, status')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('status', 'completed')
 
   return NextResponse.json({ surveys: matching, payments: payments ?? [], brfNames })
