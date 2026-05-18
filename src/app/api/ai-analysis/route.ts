@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { resolveUser } from '@/lib/auth'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Streaming håller connection vid liv. Opus levererar ~140 char/s,
 // så en 8000-token-analys (~30 000 chars) tar ~3-4 minuter.
@@ -19,6 +20,11 @@ function formatKPI(kpi: KPI) {
 }
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 5/min per IP – generöst för säljtratten (genereras
+  // i praktiken en gång), hårt mot scriptad budget-abuse.
+  const limited = rateLimit(req, 'ai-analysis', 5, 60_000)
+  if (limited) return limited
+
   const { kpis, answers, surveyId, historical } = await req.json()
   const histData = (historical ?? []) as { year: number; kpis: KPI[] }[]
 

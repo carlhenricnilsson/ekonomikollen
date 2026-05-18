@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireSuperadmin } from '@/lib/auth'
+import { rateLimit } from '@/lib/rate-limit'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -46,6 +47,10 @@ VIKTIGT:
 - Kontrollera att låneskuld (C1) stämmer med balansräkningens skuldsida`
 
 export async function POST(req: NextRequest) {
+  // Rate limit (även unauth-flod bromsas före auth-koll)
+  const limited = rateLimit(req, 'extract-pdf', 10, 60_000)
+  if (limited) return limited
+
   // Endast superadmin – kostnadsbärande (Anthropic-API), admin-only flöde
   const auth = await requireSuperadmin(req)
   if ('error' in auth) return auth.error
