@@ -24,12 +24,24 @@ function getTrafficLight(kpiId: number, value: number): TrafficLight {
 
 export function calculateKPIs(answers: SurveyAnswer): KPISet {
 
-  // Mellanberäkning för KPI 4
-  const adjusted_result = answers.F1_net_result + answers.E4_depreciation + answers.E5_planned_maintenance_costs
+  // Robust numerisk coercion – fungerar både för typad SurveyAnswer
+  // (testerna) och otypad JSON från enkät-routen (kan vara strängar).
+  const num = (v: unknown): number => {
+    const x = typeof v === 'number' ? v : Number(v)
+    return Number.isFinite(x) ? x : 0
+  }
+  const F1 = num(answers.F1_net_result)
+  const E4 = num(answers.E4_depreciation)
+  const E5 = num(answers.E5_planned_maintenance_costs)
+  const C1 = num(answers.C1_total_debt)
+  const D1 = num(answers.D1_energy_costs)
 
-  const A3 = answers.A3_brf_area_sqm || 0
-  const A4 = answers.A4_total_area_sqm || 0
-  const B1 = answers.B1_annual_fees || 0
+  // Mellanberäkning för KPI 4
+  const adjusted_result = F1 + E4 + E5
+
+  const A3 = num(answers.A3_brf_area_sqm)
+  const A4 = num(answers.A4_total_area_sqm)
+  const B1 = num(answers.B1_annual_fees)
 
   // KPI 1 – Årsavgift per kvm bostadsrätt
   const kpi1_value = A3 > 0 ? B1 / A3 : 0
@@ -44,7 +56,7 @@ export function calculateKPIs(answers: SurveyAnswer): KPISet {
   }
 
   // KPI 2 – Skuldsättning per kvm totalyta
-  const kpi2_value = A4 > 0 ? answers.C1_total_debt / A4 : 0
+  const kpi2_value = A4 > 0 ? C1 / A4 : 0
   const kpi2: KPIResult = {
     id: 2,
     name_sv: 'Skuldsättning per kvm totalyta',
@@ -56,7 +68,7 @@ export function calculateKPIs(answers: SurveyAnswer): KPISet {
   }
 
   // KPI 3 – Räntekänslighet
-  const kpi3_value = B1 > 0 ? ((answers.C1_total_debt * 0.01) / B1) * 100 : 0
+  const kpi3_value = B1 > 0 ? ((C1 * 0.01) / B1) * 100 : 0
   const kpi3: KPIResult = {
     id: 3,
     name_sv: 'Räntekänslighet',
@@ -80,7 +92,7 @@ export function calculateKPIs(answers: SurveyAnswer): KPISet {
   }
 
   // KPI 5 – Energikostnad per kvm
-  const kpi5_value = A4 > 0 ? answers.D1_energy_costs / A4 : 0
+  const kpi5_value = A4 > 0 ? D1 / A4 : 0
   const kpi5: KPIResult = {
     id: 5,
     name_sv: 'Energikostnad per kvm',
@@ -104,7 +116,7 @@ export function calculateKPIs(answers: SurveyAnswer): KPISet {
   }
 
   // KPI 7 – Belåning per kvm bostadsrätt
-  const kpi7_value = A3 > 0 ? answers.C1_total_debt / A3 : 0
+  const kpi7_value = A3 > 0 ? C1 / A3 : 0
   const kpi7: KPIResult = {
     id: 7,
     name_sv: 'Belåning per kvm bostadsrätt',

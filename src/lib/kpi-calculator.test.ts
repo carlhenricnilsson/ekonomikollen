@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateKPIs, kpiSetToArray } from './kpi-calculator'
+import { KPI_THRESH } from './kpi-scale'
 import { SurveyAnswer } from '@/types'
 
 // ── Bas-fixtur: en komplett, giltig enkät ──────────────────────
@@ -206,4 +207,67 @@ describe('kpiSetToArray', () => {
     expect(arr).toHaveLength(7)
     expect(arr.map(k => k.id)).toEqual([1, 2, 3, 4, 5, 6, 7])
   })
+})
+
+// Skyddar route-vägen: enkät-routen skickar otypad JSON (kan vara
+// strängar). Coercion ska ge samma resultat som numeriska värden.
+describe('strängkoercion (enkät-route-vägen)', () => {
+  it('strängvärden ger samma KPI som numeriska', () => {
+    const numeric = calculateKPIs(makeAnswers())
+    // Samma fixtur men alla numeriska fält som strängar
+    const asStr = makeAnswers()
+    const strFixture = Object.fromEntries(
+      Object.entries(asStr).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])
+    ) as unknown as SurveyAnswer
+    const stringy = calculateKPIs(strFixture)
+    expect(stringy.kpi1_annual_fee_per_sqm.value).toBe(numeric.kpi1_annual_fee_per_sqm.value)
+    expect(stringy.kpi4_savings_per_sqm.value).toBe(numeric.kpi4_savings_per_sqm.value)
+    expect(stringy.composite_score).toBe(numeric.composite_score)
+  })
+  it('skräp/saknat fält → 0 (ingen NaN)', () => {
+    const k = calculateKPIs(makeAnswers({ A3_brf_area_sqm: 'abc' as unknown as number }))
+    expect(Number.isFinite(k.kpi1_annual_fee_per_sqm.value)).toBe(true)
+    expect(k.kpi1_annual_fee_per_sqm.value).toBe(0) // A3=0 → division-skydd
+  })
+})
+
+// Cross-konsistens: lib:ens getTrafficLight (via calculateKPIs) måste
+// hålla sig synkad med kpi-scale.KPI_THRESH (bar-positionerna). Fångar
+// drift mellan de två kvarvarande tröskel-representationerna.
+describe('konsistens getTrafficLight ↔ KPI_THRESH', () => {
+  // value=B1/A3 etc. – driver per KPI så råvärdet blir exakt v
+  const drivers: Record<number, (v: number) => Partial<SurveyAnswer>> = {
+    1: v => ({ A3_brf_area_sqm: 1000, B1_annual_fees: v * 1000 }),
+    2: v => ({ A4_total_area_sqm: 1000, C1_total_debt: v * 1000 }),
+    3: v => ({ B1_annual_fees: 1_000_000, C1_total_debt: v * 1_000_000 }),
+    4: v => ({ A4_total_area_sqm: 1000, F1_net_result: v * 1000, E4_depreciation: 0, E5_planned_maintenance_costs: 0 }),
+    5: v => ({ A4_total_area_sqm: 1000, D1_energy_costs: v * 1000 }),
+    6: v => ({ A4_total_area_sqm: 1000, B1_annual_fees: v * 1000 }),
+    7: v => ({ A3_brf_area_sqm: 1000, C1_total_debt: v * 1000 }),
+  }
+  const keys: Record<number, keyof ReturnType<typeof calculateKPIs>> = {
+    1: 'kpi1_annual_fee_per_sqm', 2: 'kpi2_debt_per_sqm_total', 3: 'kpi3_interest_sensitivity',
+    4: 'kpi4_savings_per_sqm', 5: 'kpi5_energy_per_sqm', 6: 'kpi6_annual_fee_per_sqm_total',
+    7: 'kpi7_debt_per_sqm_brf',
+  }
+  function lightAt(id: number, v: number) {
+    const k = calculateKPIs(makeAnswers(drivers[id](v)))
+    return (k[keys[id]] as { traffic_light: string }).traffic_light
+  }
+  for (const id of [1, 2, 3, 4, 5, 6, 7]) {
+    it(`KPI${id}: grön/gul/röd matchar KPI_THRESH`, () => {
+      const { green, red } = KPI_THRESH[id]
+      const higherIsBetter = green > red // KPI4
+      const mid = (green + red) / 2
+      if (higherIsBetter) {
+        expect(lightAt(id, green + 1)).toBe('green')
+        expect(lightAt(id, mid)).toBe('yellow')
+        expect(lightAt(id, red - 1)).toBe('red')
+      } else {
+        expect(lightAt(id, green - 1)).toBe('green')
+        expect(lightAt(id, mid)).toBe('yellow')
+        expect(lightAt(id, red + 1)).toBe('red')
+      }
+    })
+  }
 })
