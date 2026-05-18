@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { resolveUser } from '@/lib/auth'
 import { buildReportName } from '@/lib/report-name'
 import { rawP, clampP, fmtScaleLabel, KPI_THRESH } from '@/lib/kpi-scale'
 import { renderToBuffer, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
@@ -96,6 +97,26 @@ export async function GET(req: NextRequest) {
   const surveyId = req.nextUrl.searchParams.get('surveyId')
   const include  = req.nextUrl.searchParams.get('include') ?? 'all'   // 'kpi' | 'ai' | 'all'
   if (!surveyId) return NextResponse.json({ error: 'Missing surveyId' }, { status: 400 })
+
+  // Åtkomstgrind: PDF endast för superadmin eller den som betalat för
+  // enkäten (speglar paywall, stänger bypass). Anonym blockeras – ser
+  // ännu rapporten på webben men får inte den nedladdningsbara PDF:en.
+  const { userId, role } = await resolveUser(req)
+  if (role !== 'superadmin') {
+    if (!userId) {
+      return NextResponse.json({ error: 'Rapporten kräver upplåsning' }, { status: 403 })
+    }
+    const { data: paid } = await supabaseAdmin
+      .from('payments')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('survey_id', surveyId)
+      .eq('status', 'completed')
+      .limit(1)
+    if (!paid || paid.length === 0) {
+      return NextResponse.json({ error: 'Rapporten kräver upplåsning' }, { status: 403 })
+    }
+  }
 
   const [{ data: survey }, { data: kpis }, , { data: aiData }] = await Promise.all([
     supabaseAdmin.from('surveys').select('*').eq('id', surveyId).single(),

@@ -269,7 +269,10 @@ export default function ResultsPage() {
   async function downloadPdf(include: 'kpi' | 'all') {
     setPdfLoading(include)
     try {
-      const res = await fetch(`/api/generate-pdf?surveyId=${surveyId}&include=${include}`)
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/generate-pdf?surveyId=${surveyId}&include=${include}`, {
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+      })
       if (!res.ok) return
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
