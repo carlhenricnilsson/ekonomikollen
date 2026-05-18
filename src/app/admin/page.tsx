@@ -123,6 +123,12 @@ export default function AdminPage() {
     }
   }
 
+  // Endast Authorization (för FormData – Content-Type sätts av webbläsaren)
+  async function bearerOnly(): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession()
+    return { Authorization: `Bearer ${session?.access_token ?? ''}` }
+  }
+
   async function createSurveyLink() {
     setCreating(true)
     // Skicka bara brf_name – API:et normaliserar namn och extraherar år
@@ -201,7 +207,7 @@ export default function AdminPage() {
     try {
       const form = new FormData()
       form.append('pdf', pdfFile)
-      const res = await fetch('/api/extract-pdf', { method: 'POST', body: form })
+      const res = await fetch('/api/extract-pdf', { method: 'POST', headers: await bearerOnly(), body: form })
       const data = await res.json()
       if (data.error) {
         setPdfError(data.error)

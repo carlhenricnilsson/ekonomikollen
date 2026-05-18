@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireSuperadmin } from '@/lib/auth'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -45,6 +46,10 @@ VIKTIGT:
 - Kontrollera att låneskuld (C1) stämmer med balansräkningens skuldsida`
 
 export async function POST(req: NextRequest) {
+  // Endast superadmin – kostnadsbärande (Anthropic-API), admin-only flöde
+  const auth = await requireSuperadmin(req)
+  if ('error' in auth) return auth.error
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'API-nyckel saknas' }, { status: 500 })
   }

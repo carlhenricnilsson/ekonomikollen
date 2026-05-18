@@ -1,6 +1,7 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { resolveUser } from '@/lib/auth'
 
 // Streaming håller connection vid liv. Opus levererar ~140 char/s,
 // så en 8000-token-analys (~30 000 chars) tar ~3-4 minuter.
@@ -20,6 +21,39 @@ function formatKPI(kpi: KPI) {
 export async function POST(req: NextRequest) {
   const { kpis, answers, surveyId, historical } = await req.json()
   const histData = (historical ?? []) as { year: number; kpis: KPI[] }[]
+
+  // --- Skydd mot API-budgetabuse (kostnadsbärande Anthropic-anrop) ---
+  // 1. surveyId måste referera en verklig, ej arkiverad enkät (billig
+  //    avvisning innan det dyra anropet – stoppar scriptad massabuse).
+  if (!surveyId) {
+    return NextResponse.json({ error: 'surveyId krävs' }, { status: 400 })
+  }
+  const { data: survey } = await supabaseAdmin
+    .from('surveys')
+    .select('id, deleted_at')
+    .eq('id', surveyId)
+    .single()
+  if (!survey || survey.deleted_at) {
+    return NextResponse.json({ error: 'Enkäten är inte tillgänglig' }, { status: 404 })
+  }
+
+  // 2. Finns redan en analys? Tillåt om-generering endast för superadmin
+  //    (förhindrar upprepad budget-bränning; säljtratten genererar bara
+  //    en gång eftersom UI:t döljer knappen när analys finns).
+  const { data: existingAnalysis } = await supabaseAdmin
+    .from('ai_analyses')
+    .select('id')
+    .eq('survey_id', surveyId)
+    .limit(1)
+  if (existingAnalysis && existingAnalysis.length > 0) {
+    const { role } = await resolveUser(req)
+    if (role !== 'superadmin') {
+      return NextResponse.json(
+        { error: 'Analys finns redan för denna enkät' },
+        { status: 409 }
+      )
+    }
+  }
 
   // Hämta fritextsvar
   const freeTexts = [
