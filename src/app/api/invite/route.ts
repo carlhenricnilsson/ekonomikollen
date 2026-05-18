@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { requireSuperadmin } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
-  const { email, brf_base_name, invited_by } = await req.json()
+  const auth = await requireSuperadmin(req)
+  if ('error' in auth) return auth.error
+
+  const { email, brf_base_name } = await req.json()
+  const invited_by = auth.userId // verifierad superadmin, inte klient-data
 
   if (!email) {
     return NextResponse.json({ error: 'E-post krävs' }, { status: 400 })

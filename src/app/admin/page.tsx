@@ -61,7 +61,6 @@ export default function AdminPage() {
   const [newVoucherMaxUses, setNewVoucherMaxUses] = useState(1)
   const [creatingVoucher, setCreatingVoucher] = useState(false)
   const [voucherMsg, setVoucherMsg] = useState('')
-  const [userId, setUserId] = useState('')
   // Arkivering / radering
   const [confirmState, setConfirmState] = useState<ConfirmState>(null)
   const [confirmInput, setConfirmInput] = useState('')
@@ -79,7 +78,6 @@ export default function AdminPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
     setUserEmail(user.email ?? '')
-    setUserId(user.id)
 
     const { data: profile } = await supabase
       .from('user_profiles')
@@ -116,12 +114,21 @@ export default function AdminPage() {
     setLoading(false)
   }
 
+  // Auth-headers för superadmin-skyddade API-anrop
+  async function authHeaders(): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession()
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token ?? ''}`,
+    }
+  }
+
   async function createSurveyLink() {
     setCreating(true)
     // Skicka bara brf_name – API:et normaliserar namn och extraherar år
     const res = await fetch('/api/create-survey-link', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authHeaders(),
       body: JSON.stringify({ brf_name: newBrfName }),
     })
     const data = await res.json()
@@ -138,8 +145,8 @@ export default function AdminPage() {
     setInviteMsg('')
     const res = await fetch('/api/invite', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail, brf_base_name: inviteBrf || null, invited_by: userId }),
+      headers: await authHeaders(),
+      body: JSON.stringify({ email: inviteEmail, brf_base_name: inviteBrf || null }),
     })
     const data = await res.json()
     if (data.success) {
@@ -153,7 +160,7 @@ export default function AdminPage() {
   }
 
   async function fetchVouchers() {
-    const res = await fetch('/api/vouchers')
+    const res = await fetch('/api/vouchers', { headers: await authHeaders() })
     const data = await res.json()
     setVouchers(data.vouchers ?? [])
   }
@@ -163,12 +170,11 @@ export default function AdminPage() {
     setVoucherMsg('')
     const res = await fetch('/api/vouchers', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authHeaders(),
       body: JSON.stringify({
         code: newVoucherCode,
         discount_percent: newVoucherDiscount,
         max_uses: newVoucherMaxUses,
-        created_by: userId,
       }),
     })
     const data = await res.json()
@@ -218,7 +224,7 @@ export default function AdminPage() {
       // Skapa enkätlänk först
       const linkRes = await fetch('/api/create-survey-link', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ brf_name: pdfExtracted.brf_name as string }),
       })
       const linkData = await linkRes.json()

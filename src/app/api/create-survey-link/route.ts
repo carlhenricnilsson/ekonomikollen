@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { requireSuperadmin } from '@/lib/auth'
 
 // Normaliserar BRF-namn: "brf-spettet7 2025" → { name: "BRF Spettet7", year: 2025 }
 function normalizeBrfName(raw: string): { name: string; year: number | null } {
@@ -23,6 +24,9 @@ function normalizeBrfName(raw: string): { name: string; year: number | null } {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSuperadmin(req)
+  if ('error' in auth) return auth.error
+
   const { brf_name, survey_year } = await req.json()
 
   const normalized = brf_name ? normalizeBrfName(brf_name) : { name: null, year: null }

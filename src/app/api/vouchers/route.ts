@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { requireSuperadmin } from '@/lib/auth'
 
-// GET: Lista alla vouchers
-export async function GET() {
+// GET: Lista alla vouchers (endast superadmin)
+export async function GET(req: NextRequest) {
+  const auth = await requireSuperadmin(req)
+  if ('error' in auth) return auth.error
+
   const { data, error } = await supabaseAdmin
     .from('vouchers')
     .select('*')
@@ -15,9 +19,12 @@ export async function GET() {
   return NextResponse.json({ vouchers: data })
 }
 
-// POST: Skapa ny voucher
+// POST: Skapa ny voucher (endast superadmin)
 export async function POST(req: NextRequest) {
-  const { code, discount_percent, max_uses, valid_until, created_by } = await req.json()
+  const auth = await requireSuperadmin(req)
+  if ('error' in auth) return auth.error
+
+  const { code, discount_percent, max_uses, valid_until } = await req.json()
 
   if (!code) {
     return NextResponse.json({ error: 'Kod krävs' }, { status: 400 })
@@ -30,7 +37,7 @@ export async function POST(req: NextRequest) {
       discount_percent: discount_percent ?? 100,
       max_uses: max_uses ?? 1,
       valid_until: valid_until || null,
-      created_by,
+      created_by: auth.userId, // verifierad superadmin, inte klient-data
     })
     .select()
     .single()
