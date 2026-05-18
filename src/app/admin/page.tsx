@@ -4,27 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase-client'
 
-type Survey = {
-  id: string
-  survey_year: number
-  status: string
-  brf_name: string | null
-  token: string
-  version: number | null
-  created_at: string
-  deleted_at: string | null
-  kpi_results: { kpi_number: number; value: number; traffic_light: string }[]
-}
-
-type ConfirmState = {
-  action: 'archive' | 'restore' | 'hard_delete'
-  scope: 'survey' | 'brf'
-  surveyId?: string
-  brfBaseName?: string
-  expectedName: string
-  label: string
-  paidCount: number
-} | null
+import { type Survey, type ConfirmState, confColor, confLabel, lightDot } from './_helpers'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -264,19 +244,6 @@ export default function AdminPage() {
     }
   }
 
-  // Konfidensindikator-färg
-  function confColor(level: string) {
-    if (level === 'high') return 'text-green-400'
-    if (level === 'medium') return 'text-yellow-400'
-    return 'text-red-400'
-  }
-
-  function confLabel(level: string) {
-    if (level === 'high') return 'Säker'
-    if (level === 'medium') return 'Osäker'
-    return 'Gissning'
-  }
-
   const filteredSurveys = surveys.filter(s => {
     if (s.deleted_at) return false // arkiverade visas i separat sektion
     const nameMatch = searchQuery === '' || (s.brf_name ?? '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -392,13 +359,6 @@ export default function AdminPage() {
     }
     setCopiedId(surveyId)
     setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  const lightDot = (light: string) => {
-    if (light === 'red') return 'bg-red-400'
-    if (light === 'yellow') return 'bg-yellow-400'
-    if (light === 'green') return 'bg-green-400'
-    return 'bg-blue-400'
   }
 
   return (
