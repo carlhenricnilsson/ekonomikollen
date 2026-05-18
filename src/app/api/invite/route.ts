@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { requireSuperadmin } from '@/lib/auth'
+import { parseBody, inviteSchema } from '@/lib/validation'
 
 export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req)
   if ('error' in auth) return auth.error
 
-  const { email, brf_base_name } = await req.json()
+  const parsed = parseBody(inviteSchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { email, brf_base_name } = parsed.data
   const invited_by = auth.userId // verifierad superadmin, inte klient-data
-
-  if (!email) {
-    return NextResponse.json({ error: 'E-post krävs' }, { status: 400 })
-  }
 
   // Kolla om redan inbjuden
   const { data: existing } = await supabaseAdmin

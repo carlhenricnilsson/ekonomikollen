@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { requireSuperadmin } from '@/lib/auth'
+import { parseBody, voucherCreateSchema } from '@/lib/validation'
 
 // GET: Lista alla vouchers (endast superadmin)
 export async function GET(req: NextRequest) {
@@ -24,11 +25,9 @@ export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req)
   if ('error' in auth) return auth.error
 
-  const { code, discount_percent, max_uses, valid_until } = await req.json()
-
-  if (!code) {
-    return NextResponse.json({ error: 'Kod krävs' }, { status: 400 })
-  }
+  const parsed = parseBody(voucherCreateSchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { code, discount_percent, max_uses, valid_until } = parsed.data
 
   const { data, error } = await supabaseAdmin
     .from('vouchers')

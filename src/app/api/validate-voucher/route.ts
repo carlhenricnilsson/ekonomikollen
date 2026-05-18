@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { parseBody, validateVoucherSchema } from '@/lib/validation'
 
 export async function POST(req: NextRequest) {
-  const { code } = await req.json()
-
-  if (!code) {
-    return NextResponse.json({ error: 'Kod krävs' }, { status: 400 })
-  }
+  const parsed = parseBody(validateVoucherSchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { code } = parsed.data
 
   const { data: voucher } = await supabaseAdmin
     .from('vouchers')

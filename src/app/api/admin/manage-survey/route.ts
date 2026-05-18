@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { requireSuperadmin } from '@/lib/auth'
-
-type Action = 'archive' | 'restore' | 'hard_delete'
-type Scope = 'survey' | 'brf'
+import { parseBody, manageSurveySchema } from '@/lib/validation'
 
 // Normaliserar BRF-namn → basnamn (utan årtal på slutet)
 function baseName(brfName: string | null): string {
@@ -16,21 +14,14 @@ export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req)
   if ('error' in auth) return auth.error
 
-  // --- 2. Parsa body ---
-  const body = await req.json()
-  const action = body.action as Action
-  const scope = body.scope as Scope
-  const surveyId = body.survey_id as string | undefined
-  const brfBaseName = body.brf_base_name as string | undefined
-  const confirmName = (body.confirm_name as string | undefined)?.trim() ?? ''
-  const force = body.force === true
-
-  if (!['archive', 'restore', 'hard_delete'].includes(action)) {
-    return NextResponse.json({ error: 'Ogiltig action' }, { status: 400 })
-  }
-  if (!['survey', 'brf'].includes(scope)) {
-    return NextResponse.json({ error: 'Ogiltig scope' }, { status: 400 })
-  }
+  // --- 2. Parsa + validera body (zod: action/scope-enums + typer) ---
+  const parsed = parseBody(manageSurveySchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { action, scope } = parsed.data
+  const surveyId = parsed.data.survey_id
+  const brfBaseName = parsed.data.brf_base_name
+  const confirmName = parsed.data.confirm_name?.trim() ?? ''
+  const force = parsed.data.force === true
 
   // --- 3. Lös ut målenkäter + förväntat bekräftelsenamn ---
   let targetIds: string[] = []

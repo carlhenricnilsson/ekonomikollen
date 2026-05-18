@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { parseBody, moneyUnlockSchema } from '@/lib/validation'
 
 const REPORT_PRICE = 5995
 
 export async function POST(req: NextRequest) {
-  const { user_id, survey_id, voucher_code } = await req.json()
-
-  if (!user_id || !survey_id) {
-    return NextResponse.json({ error: 'user_id och survey_id krävs' }, { status: 400 })
-  }
+  const parsed = parseBody(moneyUnlockSchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { user_id, survey_id, voucher_code } = parsed.data
 
   // Blockera upplåsning av arkiverad enkät
   const { data: surveyRow } = await supabaseAdmin

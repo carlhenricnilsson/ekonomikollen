@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { parseBody, moneyUnlockSchema } from '@/lib/validation'
 
 // Lazy-init: skapas vid första request, inte vid build/import
 function getStripe() {
@@ -10,14 +11,12 @@ function getStripe() {
 const REPORT_PRICE = 5995
 
 export async function POST(req: NextRequest) {
-  const { user_id, survey_id, voucher_code } = await req.json()
+  const parsed = parseBody(moneyUnlockSchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { user_id, survey_id, voucher_code } = parsed.data
 
   // Använd request-origin för redirect-URLs (fungerar både lokalt och i prod)
   const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-
-  if (!user_id || !survey_id) {
-    return NextResponse.json({ error: 'user_id och survey_id krävs' }, { status: 400 })
-  }
 
   // Blockera betalning av arkiverad enkät
   const { data: surveyRow } = await supabaseAdmin
