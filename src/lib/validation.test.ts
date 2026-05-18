@@ -6,6 +6,7 @@ import {
   voucherCreateSchema,
   inviteSchema,
   manageSurveySchema,
+  surveySubmitSchema,
 } from './validation'
 
 describe('parseBody', () => {
@@ -83,5 +84,21 @@ describe('manageSurveySchema', () => {
   })
   it('giltig minimal', () => {
     expect(parseBody(manageSurveySchema, { action: 'archive', scope: 'survey' }).ok).toBe(true)
+  })
+})
+
+describe('surveySubmitSchema', () => {
+  it('saknad answers avvisas', () => {
+    expect(parseBody(surveySubmitSchema, { token: 't' }).ok).toBe(false)
+  })
+  it('tom answers avvisas', () => {
+    expect(parseBody(surveySubmitSchema, { answers: {} }).ok).toBe(false)
+  })
+  it('answers fel typ avvisas', () => {
+    expect(parseBody(surveySubmitSchema, { answers: 'inte-objekt' }).ok).toBe(false)
+  })
+  it('icke-tom answers OK (token/brf_name valfria)', () => {
+    expect(parseBody(surveySubmitSchema, { answers: { A1_year: 2024 } }).ok).toBe(true)
+    expect(parseBody(surveySubmitSchema, { answers: { A1_year: 2024 }, token: 't', brf_name: 'X' }).ok).toBe(true)
   })
 })

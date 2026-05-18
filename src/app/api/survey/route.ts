@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { calculateKPIs, kpiSetToArray } from '@/lib/kpi-calculator'
+import { parseBody, surveySubmitSchema } from '@/lib/validation'
 import type { SurveyAnswer } from '@/types'
 
 export async function POST(req: NextRequest) {
-  const { answers, token, brf_name } = await req.json()
+  const parsed = parseBody(surveySubmitSchema, await req.json())
+  if (!parsed.ok) return parsed.res
+  const { answers, token, brf_name } = parsed.data
 
   // Enda KPI-sanningskällan: delade, testtäckta lib:en.
   // Mappas till routens etablerade svarsform {id,name,value,unit,light}

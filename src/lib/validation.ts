@@ -69,3 +69,15 @@ export const manageSurveySchema = z.object({
   confirm_name: z.string().optional(),
   force: z.boolean().optional(),
 })
+
+// --- survey (enkätinlämning) ---
+// Lätt, beteendebevarande: answers måste vara ett icke-tomt objekt
+// (annars skapas en fantom-enkät med 0-KPI:er). Fältnivå-coercion
+// hanteras robust i kpi-calculator (num()). token/brf_name valfria.
+export const surveySubmitSchema = z.object({
+  answers: z
+    .record(z.string(), z.unknown())
+    .refine(o => Object.keys(o).length > 0, { message: 'Inga svar angivna' }),
+  token: z.string().optional(),
+  brf_name: z.string().optional(),
+})

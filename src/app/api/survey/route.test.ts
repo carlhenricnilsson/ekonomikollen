@@ -31,6 +31,16 @@ describe('POST /api/survey', () => {
     expect(j.kpis[0]).toEqual(expect.objectContaining({ id: 1, name: expect.any(String), value: expect.any(Number), unit: expect.any(String), light: expect.any(String) }))
   })
 
+  it('#4: tom answers → 400 (ingen fantom-enkät skapas)', async () => {
+    setSpec({})
+    expect((await POST(makeReq({ body: { answers: {} } }))).status).toBe(400)
+  })
+
+  it('#4: saknad answers → 400', async () => {
+    setSpec({})
+    expect((await POST(makeReq({ body: { token: 'tok' } }))).status).toBe(400)
+  })
+
   it('ogiltig token → 400', async () => {
     setSpec({ surveys: () => ({ data: null }) })
     const res = await POST(makeReq({ body: { answers, token: 'bad' } }))
