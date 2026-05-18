@@ -39,8 +39,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Saknar metadata' }, { status: 400 })
     }
 
-    // Markera betalningen som completed
-    const { error: paymentError } = await supabaseAdmin
+    // Idempotent: markera som completed ENDAST om den inte redan är det.
+    // neq('status','completed') gör övergången pending→completed atomär
+    // (Postgres-radlås). Returnerade rader = de som faktiskt övergick.
+    // Stripe gör om-leveranser av webhooks – utan detta dubbelräknas
+    // voucher-användning vid varje retry.
+    const { data: transitioned, error: paymentError } = await supabaseAdmin
       .from('payments')
       .update({
         status: 'completed',
@@ -51,13 +55,22 @@ export async function POST(req: NextRequest) {
       })
       .eq('user_id', user_id)
       .eq('survey_id', survey_id)
+      .neq('status', 'completed')
+      .select('id')
 
     if (paymentError) {
       console.error('Kunde inte uppdatera betalning:', paymentError)
       return NextResponse.json({ error: 'Databasfel' }, { status: 500 })
     }
 
-    // Öka voucher-användningen om en rabattkod användes
+    const firstTransition = (transitioned?.length ?? 0) > 0
+    if (!firstTransition) {
+      // Redan behandlad (Stripe-retry/dubbelleverans) → inga sidoeffekter
+      console.log(`Webhook redan behandlad, hoppar över: session=${session.id}`)
+      return NextResponse.json({ received: true })
+    }
+
+    // Öka voucher-användningen – körs nu exakt en gång per betalning
     if (voucher_id) {
       const { data: voucher } = await supabaseAdmin
         .from('vouchers')

@@ -60,26 +60,42 @@ describe('POST /api/stripe-webhook', () => {
     expect(res.status).toBe(400)
   })
 
-  it('completed utan voucher → markerar payment completed', async () => {
-    setSpec({ payments: () => ({}) })
+  it('completed utan voucher → markerar payment completed (första övergången)', async () => {
+    // payments-update returnerar transitionerad rad → firstTransition=true
+    setSpec({ payments: (s: QState) => (s.op === 'update' ? { data: [{ id: 'p1' }] } : {}) })
     setStripe({ constructEvent: () => completedEvent({ survey_id: 's1', user_id: 'u1' }) })
     const res = await POST(makeReq({ rawBody: '{}', headers: { 'stripe-signature': 'sig' } }))
     expect(await res.json()).toEqual({ received: true })
     const upd = calls.find(c => c.table === 'payments' && c.op === 'update')
     expect((upd?.payload as { status: string }).status).toBe('completed')
     expect((upd?.payload as { stripe_payment_intent_id: string }).stripe_payment_intent_id).toBe('pi_1')
-    expect(upd?.filters).toEqual(expect.arrayContaining([['eq', 'user_id', 'u1'], ['eq', 'survey_id', 's1']]))
+    expect(upd?.filters).toEqual(expect.arrayContaining([
+      ['eq', 'user_id', 'u1'], ['eq', 'survey_id', 's1'], ['neq', 'status', 'completed'],
+    ]))
   })
 
-  it('completed med voucher_id → ökar times_used', async () => {
+  it('completed med voucher_id → ökar times_used (en gång)', async () => {
     setSpec({
-      payments: () => ({}),
+      payments: (s: QState) => (s.op === 'update' ? { data: [{ id: 'p1' }] } : {}),
       vouchers: (s: QState) => (s.single ? { data: { times_used: 4 } } : {}),
     })
     setStripe({ constructEvent: () => completedEvent({ survey_id: 's1', user_id: 'u1', voucher_id: 'v1' }) })
     await POST(makeReq({ rawBody: '{}', headers: { 'stripe-signature': 'sig' } }))
     const vUpd = calls.find(c => c.table === 'vouchers' && c.op === 'update')
     expect(vUpd?.payload).toEqual({ times_used: 5 }) // 4 + 1
+  })
+
+  it('IDEMPOTENS: retry/dubbelleverans (redan completed) → ingen voucher-inkrement', async () => {
+    // neq('status','completed') exkluderar redan-completed → 0 rader transitionerade
+    setSpec({
+      payments: (s: QState) => (s.op === 'update' ? { data: [] } : {}),
+      vouchers: (s: QState) => (s.single ? { data: { times_used: 4 } } : {}),
+    })
+    setStripe({ constructEvent: () => completedEvent({ survey_id: 's1', user_id: 'u1', voucher_id: 'v1' }) })
+    const res = await POST(makeReq({ rawBody: '{}', headers: { 'stripe-signature': 'sig' } }))
+    expect(await res.json()).toEqual({ received: true })
+    // Voucher får INTE inkrementeras vid retry
+    expect(calls.find(c => c.table === 'vouchers' && c.op === 'update')).toBeUndefined()
   })
 
   it('DB-fel vid payment-update → 500', async () => {

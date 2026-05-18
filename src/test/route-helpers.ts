@@ -46,6 +46,7 @@ function makeBuilder(table: string) {
     is: (c: string, v: unknown) => { state.filters.push(['is', c, v]); return b },
     not: (c: string, _o: string, v: unknown) => { state.filters.push(['not', c, v]); return b },
     ilike: (c: string, v: unknown) => { state.filters.push(['ilike', c, v]); return b },
+    neq: (c: string, v: unknown) => { state.filters.push(['neq', c, v]); return b },
     order: () => b,
     limit: () => b,
     single: () => resolve(true),
