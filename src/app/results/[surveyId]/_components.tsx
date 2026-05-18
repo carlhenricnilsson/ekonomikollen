@@ -117,35 +117,6 @@ export function MarkdownText({ text }: { text: string }) {
   )
 }
 
-export function BenchmarkBar({ kpi, benchmark }: { kpi: KPI; benchmark: Benchmark }) {
-  const fmt2 = (v: number) => kpi.unit === '%' ? `${v.toFixed(1)}%` : `${Math.round(v).toLocaleString('sv-SE')}`
-  const c = LIGHT_COLORS[kpi.light]
-
-  return (
-    <div className="mt-3 pt-3 border-t border-white/10">
-      <div className="grid grid-cols-4 text-center gap-2">
-        <div>
-          <div className="text-white/40 text-xs mb-0.5">25:e percentil</div>
-          <div className="text-white/70 text-sm font-semibold">{fmt2(benchmark.p25)}</div>
-        </div>
-        <div>
-          <div className="text-white/40 text-xs mb-0.5">Median</div>
-          <div className="text-white font-bold text-sm">{fmt2(benchmark.median)}</div>
-        </div>
-        <div>
-          <div className="text-white/40 text-xs mb-0.5">75:e percentil</div>
-          <div className="text-white/70 text-sm font-semibold">{fmt2(benchmark.p75)}</div>
-        </div>
-        <div>
-          <div className={`${c.text} text-xs font-bold mb-0.5`}>Er BRF</div>
-          <div className={`${c.text} text-sm font-bold`}>{fmt2(kpi.value)}</div>
-        </div>
-      </div>
-      <div className="text-xs text-white/25 mt-1 text-right">{benchmark.source}</div>
-    </div>
-  )
-}
-
 export function Spinner() {
   return (
     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">

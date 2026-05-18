@@ -260,11 +260,6 @@ export default function AdminPage() {
       return b.survey_year - a.survey_year
     })
 
-  function baseName(brfName: string | null): string {
-    if (!brfName) return ''
-    return brfName.replace(/\s+\d{4}$/, '').trim()
-  }
-
   // Räknar genomförda betalningar för en uppsättning enkäter
   function countPaid(surveyIds: string[]): number {
     return paidSurveyIds.filter(id => surveyIds.includes(id)).length
