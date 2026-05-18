@@ -355,6 +355,10 @@ export default function ResultsPage() {
 
   // Fullständig tillgång: superadmin, betald, eller anonym (från enkätlänk)
   const hasFullAccess = reportUnlocked || userRole === 'superadmin' || userRole === 'anonymous'
+  // PDF är en betald deliverabel: speglar serverns generate-pdf-grind
+  // (superadmin ELLER betald). Anonym ser rapporten på webben men
+  // inte PDF-knappen (hade annars gett tyst 403).
+  const canDownloadPdf = reportUnlocked || userRole === 'superadmin'
 
   async function payWithStripe(voucher?: string) {
     if (!userId) return
@@ -412,8 +416,8 @@ export default function ResultsPage() {
       <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between">
         <span className="text-xl font-bold">BRF-Ekonomi<span className="text-blue-400">kollen</span></span>
         <div className="flex items-center gap-3">
-          {/* PDF-knappar – bara med full tillgång */}
-          {hasFullAccess && (
+          {/* PDF-knappar – endast superadmin eller betald (speglar servern) */}
+          {canDownloadPdf && (
             <>
               <button
                 onClick={() => downloadPdf('kpi')}
