@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     if (finalPrice === 0) {
       // Helt gratis – lås upp direkt
-      await supabaseAdmin.from('payments').insert({
+      const { error: payErr } = await supabaseAdmin.from('payments').insert({
         user_id,
         survey_id,
         amount_sek: 0,
@@ -65,8 +65,12 @@ export async function POST(req: NextRequest) {
         voucher_id: voucher.id,
         paid_at: new Date().toISOString(),
       })
+      if (payErr) {
+        console.error('Gratis-upplåsning misslyckades:', payErr)
+        return NextResponse.json({ error: 'Kunde inte låsa upp rapporten' }, { status: 500 })
+      }
 
-      // Öka times_used
+      // Öka times_used (best-effort – upplåsningen är redan sparad)
       await supabaseAdmin
         .from('vouchers')
         .update({ times_used: voucher.times_used + 1 })

@@ -29,10 +29,14 @@ export async function POST(req: NextRequest) {
 
     if (existing) {
       surveyId = existing.id
-      await supabaseAdmin
+      const { error: updErr } = await supabaseAdmin
         .from('surveys')
         .update({ status: 'completed', survey_year: Number(answers.A1_year) || new Date().getFullYear() })
         .eq('id', surveyId)
+      if (updErr) {
+        console.error('Survey update error:', updErr)
+        return NextResponse.json({ error: 'Kunde inte spara enkäten' }, { status: 500 })
+      }
     } else {
       return NextResponse.json({ error: 'Ogiltig enkätlänk' }, { status: 400 })
     }
@@ -50,7 +54,9 @@ export async function POST(req: NextRequest) {
 
     if (surveyError || !survey) {
       console.error('Survey insert error:', surveyError)
-      return NextResponse.json({ surveyId: crypto.randomUUID(), kpis, answers })
+      // Tidigare: returnerade fejkad random surveyId + 200 (falsk
+      // success → trasig results-sida). Nu korrekt fel.
+      return NextResponse.json({ error: 'Kunde inte skapa enkäten' }, { status: 500 })
     }
     surveyId = survey.id
   }
@@ -58,8 +64,12 @@ export async function POST(req: NextRequest) {
   // Idempotent: rensa ev. tidigare svar/KPI för enkäten innan nya sparas.
   // Förhindrar dubbletter om samma tokenlänk lämnas in mer än en gång.
   // För en nyskapad enkät matchar detta 0 rader (no-op).
-  await supabaseAdmin.from('answers').delete().eq('survey_id', surveyId)
-  await supabaseAdmin.from('kpi_results').delete().eq('survey_id', surveyId)
+  const { error: delAErr } = await supabaseAdmin.from('answers').delete().eq('survey_id', surveyId)
+  const { error: delKErr } = await supabaseAdmin.from('kpi_results').delete().eq('survey_id', surveyId)
+  if (delAErr || delKErr) {
+    console.error('Survey cleanup error:', delAErr || delKErr)
+    return NextResponse.json({ error: 'Kunde inte spara enkäten' }, { status: 500 })
+  }
 
   // Spara alla svar
   const answerRows = Object.entries(answers).map(([question_code, value]) => ({
@@ -70,7 +80,11 @@ export async function POST(req: NextRequest) {
     answer_choice: typeof value === 'boolean' ? String(value) : null,
   }))
 
-  await supabaseAdmin.from('answers').insert(answerRows)
+  const { error: insAErr } = await supabaseAdmin.from('answers').insert(answerRows)
+  if (insAErr) {
+    console.error('Answers insert error:', insAErr)
+    return NextResponse.json({ error: 'Kunde inte spara svaren' }, { status: 500 })
+  }
 
   // Spara KPI-resultat
   const kpiRows = kpis.map(k => ({
@@ -82,7 +96,11 @@ export async function POST(req: NextRequest) {
     traffic_light: k.light,
   }))
 
-  await supabaseAdmin.from('kpi_results').insert(kpiRows)
+  const { error: insKErr } = await supabaseAdmin.from('kpi_results').insert(kpiRows)
+  if (insKErr) {
+    console.error('KPI insert error:', insKErr)
+    return NextResponse.json({ error: 'Kunde inte spara nyckeltalen' }, { status: 500 })
+  }
 
   return NextResponse.json({ surveyId: surveyId, kpis, answers })
 }

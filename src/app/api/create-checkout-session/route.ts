@@ -109,8 +109,10 @@ export async function POST(req: NextRequest) {
     locale: 'sv',
   })
 
-  // Skapa/uppdatera pending betalning i databasen
-  await supabaseAdmin.from('payments').upsert(
+  // Skapa/uppdatera pending betalning i databasen.
+  // Måste lyckas – annars hittar webhooken ingen rad att markera
+  // completed → kund betalar men rapporten förblir låst.
+  const { error: upsertErr } = await supabaseAdmin.from('payments').upsert(
     {
       user_id,
       survey_id,
@@ -121,6 +123,10 @@ export async function POST(req: NextRequest) {
     },
     { onConflict: 'user_id,survey_id' }
   )
+  if (upsertErr) {
+    console.error('Pending-betalning kunde inte sparas:', upsertErr)
+    return NextResponse.json({ error: 'Kunde inte starta betalningen' }, { status: 500 })
+  }
 
   return NextResponse.json({ url: session.url })
 }
