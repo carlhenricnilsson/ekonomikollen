@@ -70,19 +70,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    // Öka voucher-användningen – körs nu exakt en gång per betalning
+    // Öka voucher-användningen ATOMÄRT – körs exakt en gång per
+    // betalning (firstTransition-grindad) och är lost-update-säker
+    // vid samtidiga betalningar på samma fler-användnings-voucher.
     if (voucher_id) {
-      const { data: voucher } = await supabaseAdmin
-        .from('vouchers')
-        .select('times_used')
-        .eq('id', voucher_id)
-        .single()
-
-      if (voucher) {
-        await supabaseAdmin
-          .from('vouchers')
-          .update({ times_used: voucher.times_used + 1 })
-          .eq('id', voucher_id)
+      const { error: voucherErr } = await supabaseAdmin
+        .rpc('increment_voucher_use', { p_voucher_id: voucher_id })
+      if (voucherErr) {
+        console.error('Kunde inte öka voucher-användning:', voucherErr)
       }
     }
 

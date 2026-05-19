@@ -61,7 +61,24 @@ export async function POST(req: NextRequest) {
     const finalPrice = Math.round(REPORT_PRICE * (1 - voucher.discount_percent / 100))
 
     if (finalPrice === 0) {
-      // Helt gratis – lås upp direkt
+      // Helt gratis. Reservera voucher-användningen ATOMÄRT först
+      // (ETT villkorat UPDATE + radlås i DB) – stänger TOCTOU där
+      // samtidiga inlösen av en engångskod annars båda låste upp.
+      const { data: redeem, error: redeemErr } = await supabaseAdmin
+        .rpc('redeem_voucher', { p_voucher_id: voucher.id })
+        .single()
+      if (redeemErr) {
+        console.error('Voucher-reservering misslyckades:', redeemErr)
+        return NextResponse.json({ error: 'Kunde inte lösa in rabattkoden' }, { status: 500 })
+      }
+      if (!(redeem as { ok?: boolean } | null)?.ok) {
+        return NextResponse.json(
+          { error: 'Rabattkoden har redan använts maximalt antal gånger' },
+          { status: 400 }
+        )
+      }
+
+      // Reservering lyckad → lås upp
       const { error: payErr } = await supabaseAdmin.from('payments').insert({
         user_id,
         survey_id,
@@ -71,15 +88,12 @@ export async function POST(req: NextRequest) {
         paid_at: new Date().toISOString(),
       })
       if (payErr) {
-        console.error('Gratis-upplåsning misslyckades:', payErr)
+        // Reserveringen är redan spenderad. Fail-safe-riktning
+        // (voucher under-, aldrig över-tillgänglig). Logga för
+        // ev. manuell granskning.
+        console.error('Gratis-upplåsning misslyckades EFTER voucher-reservering:', payErr)
         return NextResponse.json({ error: 'Kunde inte låsa upp rapporten' }, { status: 500 })
       }
-
-      // Öka times_used (best-effort – upplåsningen är redan sparad)
-      await supabaseAdmin
-        .from('vouchers')
-        .update({ times_used: voucher.times_used + 1 })
-        .eq('id', voucher.id)
 
       return NextResponse.json({ unlocked: true, final_price: 0 })
     }

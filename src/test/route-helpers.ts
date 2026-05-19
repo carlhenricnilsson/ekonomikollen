@@ -56,7 +56,30 @@ function makeBuilder(table: string) {
   return b
 }
 
-export const supabaseAdmin = { from: (t: string) => makeBuilder(t) }
+// Mock för supabaseAdmin.rpc(fn, params) – resolvas via Spec[fn]
+// (samma mekanik som tabeller; calls.table = funktionsnamnet).
+function makeRpc(fn: string, params: unknown) {
+  const state: QState = { table: fn, op: 'select', filters: [], payload: params }
+  const resolve = async (single: boolean) => {
+    state.single = single
+    calls.push({ ...state, filters: [] })
+    const handler = activeSpec[fn]
+    const r: TableResult = handler ? await handler(state) : {}
+    return { data: r.data ?? (single ? null : []), error: r.error ?? null }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b: any = {
+    single: () => resolve(true),
+    then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      resolve(false).then(res, rej),
+  }
+  return b
+}
+
+export const supabaseAdmin = {
+  from: (t: string) => makeBuilder(t),
+  rpc: (fn: string, params?: unknown) => makeRpc(fn, params),
+}
 
 // ---- Stripe-mock ----
 let stripeSessionsCreate: (args: unknown) => Promise<unknown> = async () => ({

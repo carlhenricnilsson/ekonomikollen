@@ -65,19 +65,33 @@ describe('POST /api/unlock-report', () => {
     expect((await POST(makeReq({ body: { ...base.body, voucher_code: 'USED' } }))).status).toBe(400)
   })
 
-  it('100%-voucher → låser upp direkt + skapar completed payment + ökar times_used', async () => {
+  it('100%-voucher → reserverar atomärt (rpc) + skapar completed payment', async () => {
     setSpec({
       ...activeSurvey,
       payments: (s) => (s.op === 'select' ? { data: [] } : {}),
       vouchers: (s) => (s.single ? { data: { id: 'v9', discount_percent: 100, valid_until: null, max_uses: 5, times_used: 2 } } : {}),
+      redeem_voucher: () => ({ data: { ok: true, new_times_used: 3, max_uses: 5 } }),
     })
     const j = await (await POST(makeReq({ body: { ...base.body, voucher_code: 'GRATIS' } }))).json()
     expect(j).toEqual({ unlocked: true, final_price: 0 })
 
+    const reserve = calls.find(c => c.table === 'redeem_voucher')
+    expect(reserve?.payload).toEqual({ p_voucher_id: 'v9' })
     const insert = calls.find(c => c.table === 'payments' && c.op === 'insert')
     expect(insert?.payload).toMatchObject({ status: 'completed', amount_sek: 0, voucher_id: 'v9' })
-    const vUpdate = calls.find(c => c.table === 'vouchers' && c.op === 'update')
-    expect(vUpdate?.payload).toEqual({ times_used: 3 }) // 2 + 1
+  })
+
+  it('100%-voucher men atomär reservering nekas (race/förbrukad) → 400, INGEN upplåsning', async () => {
+    setSpec({
+      ...activeSurvey,
+      payments: (s) => (s.op === 'select' ? { data: [] } : {}),
+      vouchers: (s) => (s.single ? { data: { id: 'v9', discount_percent: 100, valid_until: null, max_uses: 1, times_used: 0 } } : {}),
+      redeem_voucher: () => ({ data: { ok: false, new_times_used: null, max_uses: null } }),
+    })
+    const res = await POST(makeReq({ body: { ...base.body, voucher_code: 'GRATIS' } }))
+    expect(res.status).toBe(400)
+    // Ingen completed payment fick skapas när reserveringen nekades
+    expect(calls.find(c => c.table === 'payments' && c.op === 'insert')).toBeUndefined()
   })
 
   it('partiell voucher (50%) → requires_payment, final_price 2998', async () => {

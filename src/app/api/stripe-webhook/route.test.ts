@@ -74,28 +74,26 @@ describe('POST /api/stripe-webhook', () => {
     ]))
   })
 
-  it('completed med voucher_id → ökar times_used (en gång)', async () => {
+  it('completed med voucher_id → atomär increment_voucher_use (en gång)', async () => {
     setSpec({
       payments: (s: QState) => (s.op === 'update' ? { data: [{ id: 'p1' }] } : {}),
-      vouchers: (s: QState) => (s.single ? { data: { times_used: 4 } } : {}),
     })
     setStripe({ constructEvent: () => completedEvent({ survey_id: 's1', user_id: 'u1', voucher_id: 'v1' }) })
     await POST(makeReq({ rawBody: '{}', headers: { 'stripe-signature': 'sig' } }))
-    const vUpd = calls.find(c => c.table === 'vouchers' && c.op === 'update')
-    expect(vUpd?.payload).toEqual({ times_used: 5 }) // 4 + 1
+    const inc = calls.find(c => c.table === 'increment_voucher_use')
+    expect(inc?.payload).toEqual({ p_voucher_id: 'v1' })
   })
 
   it('IDEMPOTENS: retry/dubbelleverans (redan completed) → ingen voucher-inkrement', async () => {
     // neq('status','completed') exkluderar redan-completed → 0 rader transitionerade
     setSpec({
       payments: (s: QState) => (s.op === 'update' ? { data: [] } : {}),
-      vouchers: (s: QState) => (s.single ? { data: { times_used: 4 } } : {}),
     })
     setStripe({ constructEvent: () => completedEvent({ survey_id: 's1', user_id: 'u1', voucher_id: 'v1' }) })
     const res = await POST(makeReq({ rawBody: '{}', headers: { 'stripe-signature': 'sig' } }))
     expect(await res.json()).toEqual({ received: true })
     // Voucher får INTE inkrementeras vid retry
-    expect(calls.find(c => c.table === 'vouchers' && c.op === 'update')).toBeUndefined()
+    expect(calls.find(c => c.table === 'increment_voucher_use')).toBeUndefined()
   })
 
   it('DB-fel vid payment-update → 500', async () => {
