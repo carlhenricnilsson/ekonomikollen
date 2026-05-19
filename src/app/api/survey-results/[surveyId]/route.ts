@@ -8,9 +8,11 @@ export async function GET(
   { params }: { params: Promise<{ surveyId: string }> }
 ) {
   // Capability-URL: returnerar konfidentiell rapportdata till vem som
-  // helst med surveyId. Throttla scraping/uppräkning (enda data-
-  // returnerande endpoint som tidigare saknade rate limit).
-  const limited = rateLimit(req, 'survey-results', 30, 60_000)
+  // helst med surveyId. Throttla scraping/uppräkning. 15/min/IP är
+  // rikligt för legitim lågfrekvent rapportvisning men biter rejält
+  // mot automatiserad skrapning (best-effort per-instans i serverless
+  // – strikt globalt tak kräver KV/Redis, se rate-limit.ts).
+  const limited = rateLimit(req, 'survey-results', 15, 60_000)
   if (limited) return limited
 
   const { surveyId } = await params
