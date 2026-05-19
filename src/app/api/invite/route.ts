@@ -12,18 +12,6 @@ export async function POST(req: NextRequest) {
   const { email, brf_base_name } = parsed.data
   const invited_by = auth.userId // verifierad superadmin, inte klient-data
 
-  // Kolla om redan inbjuden
-  const { data: existing } = await supabaseAdmin
-    .from('invitations')
-    .select('id')
-    .eq('email', email.toLowerCase())
-    .eq('accepted', false)
-    .limit(1)
-
-  if (existing && existing.length > 0 && brf_base_name) {
-    // Uppdatera befintlig inbjudan med ny BRF om det behövs
-  }
-
   const { data, error } = await supabaseAdmin
     .from('invitations')
     .insert({
@@ -39,17 +27,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Kunde inte skapa inbjudan' }, { status: 500 })
   }
 
-  // Om användaren redan har ett konto, koppla BRF direkt
+  // Om användaren redan har ett konto, koppla BRF direkt.
+  // listUsers() saknar e-postfilter → paginera (annars missas
+  // användare bortom första sidan ~50 och kopplingen sker tyst aldrig).
   if (brf_base_name) {
-    const { data: existingUser } = await supabaseAdmin
-      .from('user_profiles')
-      .select('id')
-      .eq('id', (await supabaseAdmin.auth.admin.listUsers()).data.users.find(u => u.email === email.toLowerCase())?.id ?? '')
-      .single()
+    let existingUserId: string | null = null
+    let page = 1
+    const perPage = 1000
+    while (true) {
+      const { data: list, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+      if (listErr || !list) break
+      const match = list.users.find(u => (u.email ?? '').toLowerCase() === email.toLowerCase())
+      if (match) { existingUserId = match.id; break }
+      if (list.users.length < perPage) break
+      page++
+    }
 
-    if (existingUser) {
+    if (existingUserId) {
       await supabaseAdmin.from('brf_admin_brfs').upsert({
-        user_id: existingUser.id,
+        user_id: existingUserId,
         brf_base_name,
       }, { onConflict: 'user_id,brf_base_name' })
 

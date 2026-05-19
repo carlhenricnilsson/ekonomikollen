@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { resolveUser } from '@/lib/auth'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ surveyId: string }> }
 ) {
+  // Capability-URL: returnerar konfidentiell rapportdata till vem som
+  // helst med surveyId. Throttla scraping/uppräkning (enda data-
+  // returnerande endpoint som tidigare saknade rate limit).
+  const limited = rateLimit(req, 'survey-results', 30, 60_000)
+  if (limited) return limited
+
   const { surveyId } = await params
 
   // Hämta inloggad användare via Authorization-header (delad helper)
