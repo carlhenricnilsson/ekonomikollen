@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase-server', async () => {
   const h = await import('@/test/route-helpers')
@@ -7,9 +7,12 @@ vi.mock('@/lib/supabase-server', async () => {
 
 import { POST } from './route'
 import { setSpec, makeReq } from '@/test/route-helpers'
+import { __resetRateLimit } from '@/lib/rate-limit'
 
 const future = new Date(Date.now() + 86400000).toISOString()
 const past = new Date(Date.now() - 86400000).toISOString()
+
+beforeEach(() => __resetRateLimit())
 
 describe('POST /api/validate-voucher', () => {
   it('saknad kod → 400', async () => {

@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Kollar om en e-postadress redan är registrerad i auth.users
 // (oavsett om kontot är verifierat eller inte)
 export async function POST(req: NextRequest) {
+  // Skydd mot oautentiserad konto-enumerering + amplifiering
+  // (varje anrop kan skanna hela användarbasen).
+  const limited = rateLimit(req, 'check-email', 15, 60_000)
+  if (limited) return limited
+
   const { email } = await req.json()
 
   if (!email || typeof email !== 'string') {

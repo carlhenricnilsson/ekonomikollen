@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { parseBody, moneyUnlockSchema } from '@/lib/validation'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Lazy-init: skapas vid första request, inte vid build/import
 function getStripe() {
@@ -11,6 +12,10 @@ function getStripe() {
 const REPORT_PRICE = 5995
 
 export async function POST(req: NextRequest) {
+  // Skydd mot abuse/brute-force av voucher-vägen i checkout.
+  const limited = rateLimit(req, 'create-checkout-session', 10, 60_000)
+  if (limited) return limited
+
   const parsed = parseBody(moneyUnlockSchema, await req.json())
   if (!parsed.ok) return parsed.res
   const { user_id, survey_id, voucher_code } = parsed.data

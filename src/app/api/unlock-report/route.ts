@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { parseBody, moneyUnlockSchema } from '@/lib/validation'
+import { rateLimit } from '@/lib/rate-limit'
 
 const REPORT_PRICE = 5995
 
 export async function POST(req: NextRequest) {
+  // Skydd mot brute-force/abuse av voucher-inlösen (gratis rapport).
+  const limited = rateLimit(req, 'unlock-report', 8, 60_000)
+  if (limited) return limited
+
   const parsed = parseBody(moneyUnlockSchema, await req.json())
   if (!parsed.ok) return parsed.res
   const { user_id, survey_id, voucher_code } = parsed.data

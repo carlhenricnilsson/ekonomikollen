@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { parseBody, validateVoucherSchema } from '@/lib/validation'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
+  // Skydd mot skriptad brute-force av lågentropi-rabattkoder
+  // (en giltig 100%-kod = gratis rapport värd 5 995 kr).
+  const limited = rateLimit(req, 'validate-voucher', 10, 60_000)
+  if (limited) return limited
+
   const parsed = parseBody(validateVoucherSchema, await req.json())
   if (!parsed.ok) return parsed.res
   const { code } = parsed.data

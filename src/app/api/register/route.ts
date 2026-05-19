@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Normaliserar BRF-namn: "brf-spettet7" → "BRF Spettet7"
 function normalizeBrfBaseName(raw: string): string {
@@ -16,6 +17,11 @@ function normalizeBrfBaseName(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  // admin.createUser kringgår Supabases inbyggda signup-throttle –
+  // egen rate limit mot massregistrering/abuse.
+  const limited = rateLimit(req, 'register', 5, 60_000)
+  if (limited) return limited
+
   const { email, password, brf_name, phone } = await req.json()
 
   if (!email || !password) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase-server', async () => {
   const h = await import('@/test/route-helpers')
@@ -11,6 +11,7 @@ vi.mock('stripe', async () => {
 
 import { POST } from './route'
 import { setSpec, setStripe, makeReq, calls, QState } from '@/test/route-helpers'
+import { __resetRateLimit } from '@/lib/rate-limit'
 
 const base = { body: { user_id: 'u1', survey_id: 's1' }, headers: { origin: 'https://test.app' } }
 const activeSurvey = { surveys: () => ({ data: { deleted_at: null, brf_name: 'BRF Test', survey_year: 2025 } }) }
@@ -26,6 +27,8 @@ function stubStripe() {
     },
   })
 }
+
+beforeEach(() => __resetRateLimit())
 
 describe('POST /api/create-checkout-session', () => {
   it('saknade params → 400', async () => {

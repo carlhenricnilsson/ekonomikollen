@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase-server', async () => {
   const h = await import('@/test/route-helpers')
@@ -7,6 +7,7 @@ vi.mock('@/lib/supabase-server', async () => {
 
 import { POST } from './route'
 import { setSpec, makeReq, QState } from '@/test/route-helpers'
+import { __resetRateLimit } from '@/lib/rate-limit'
 
 const answers = {
   A1_year: 2024, A3_brf_area_sqm: 1000, A4_total_area_sqm: 1200,
@@ -16,6 +17,8 @@ const answers = {
 const okWrites = {
   answers: () => ({}), kpi_results: () => ({}),
 }
+
+beforeEach(() => __resetRateLimit())
 
 describe('POST /api/survey', () => {
   it('happy path (utan token) → 200, surveyId + 7 KPI i rätt form', async () => {
