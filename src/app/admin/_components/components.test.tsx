@@ -52,12 +52,23 @@ describe('admin/_components – render-smoketester', () => {
     expect(h).toContain('Vouchers')
   })
 
-  it('StatsCards räknar totalt/genomförda/unika BRF', () => {
+  it('StatsCards räknar ENDAST aktiva enkäter (arkiverade exkluderas)', () => {
     const h = renderToStaticMarkup(
-      <StatsCards surveys={[survey(), survey({ id: 's2', status: 'open', brf_name: 'BRF Andra 2023' })]} />
+      <StatsCards surveys={[
+        survey({ id: 'a', status: 'completed', brf_name: 'BRF Ett 2024' }),
+        survey({ id: 'b', status: 'open', brf_name: 'BRF Två 2024' }),
+        survey({ id: 'c', status: 'completed', brf_name: 'BRF Arkiverad 2024', deleted_at: '2026-01-01T00:00:00Z' }),
+      ]} />
     )
     expect(h).toContain('Totalt antal enkäter')
     expect(h).toContain('Unika BRF:er')
+    // 2 aktiva (ej 3), 1 genomförd aktiv (ej 2), 2 unika aktiva BRF (ej 3)
+    expect(h).toContain('font-bold">2</p>')
+    expect(h).toContain('text-green-400">1</p>')
+    expect(h).toContain('text-blue-400">2</p>')
+    // Arkiverad enkät får ALDRIG räknas in (regression)
+    expect(h).not.toContain('font-bold">3</p>')
+    expect(h).not.toContain('text-green-400">2</p>')
   })
 
   it('SearchBar renderar år-options och rensa-knapp vid aktiv filtrering', () => {
