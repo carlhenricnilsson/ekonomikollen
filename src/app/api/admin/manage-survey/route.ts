@@ -94,7 +94,11 @@ export async function POST(req: NextRequest) {
   }
 
   // --- 4. Bekräftelsenamn måste matcha exakt (case-insensitivt) ---
-  if (confirmName.toLowerCase() !== expectedConfirm.toLowerCase()) {
+  // Gäller endast destruktiva åtgärder (archive/hard_delete). Återställning
+  // är icke-destruktiv (deleted_at → null) och UI:t döljer medvetet
+  // bekräftelsefältet för restore – kräv därför inget bekräftelsenamn där,
+  // annars skickar klienten alltid tom sträng och restore kan aldrig lyckas.
+  if (action !== 'restore' && confirmName.toLowerCase() !== expectedConfirm.toLowerCase()) {
     return NextResponse.json(
       { error: `Bekräftelsenamnet matchar inte. Skriv exakt: "${expectedConfirm}"` },
       { status: 400 }

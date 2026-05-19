@@ -96,4 +96,22 @@ describe('POST /api/admin/manage-survey', () => {
     const res = await POST(makeReq({ body: { action: 'restore', scope: 'survey', survey_id: 's1', confirm_name: 'BRF Test' } }))
     expect(res.status).toBe(409)
   })
+
+  // Regression: UI:t döljer bekräftelsefältet för restore och skickar
+  // confirm_name: "" – tidigare blockerade route:n detta med 400 så att
+  // återställning ALDRIG kunde lyckas från gränssnittet.
+  it('restore av arkiverad UTAN confirm_name (så UI:t skickar) → 200 restored:1, deleted_at=null', async () => {
+    setSpec({ surveys: (s: QState) => (s.single ? { data: { ...survey, deleted_at: '2026-01-01' } } : {}) })
+    const j = await (await POST(makeReq({ body: { action: 'restore', scope: 'survey', survey_id: 's1', confirm_name: '' } }))).json()
+    expect(j).toEqual({ ok: true, restored: 1 })
+    const upd = calls.find(c => c.table === 'surveys' && c.op === 'update')
+    expect((upd?.payload as { deleted_at: null }).deleted_at).toBeNull()
+  })
+
+  // Skyddsräcke: destruktiva åtgärder kräver fortfarande exakt bekräftelsenamn.
+  it('archive UTAN confirm_name → fortfarande 400 (destruktivt, oförändrat)', async () => {
+    setSpec({ surveys: () => ({ data: survey }) })
+    const res = await POST(makeReq({ body: { action: 'archive', scope: 'survey', survey_id: 's1', confirm_name: '' } }))
+    expect(res.status).toBe(400)
+  })
 })
